@@ -20,6 +20,7 @@ class HostArgs {
     required this.count,
     required this.dryRun,
     required this.preferProvider,
+    this.mute = false,
     this.contentId,
     this.agentTask,
   });
@@ -29,6 +30,9 @@ class HostArgs {
   final String dialect;
   final int count;
   final bool dryRun;
+
+  /// `--mute`: skip TTS, silent narration tracks (subtitles still render).
+  final bool mute;
 
   /// `'dashscope'` (default) or `'oss'`; forwarded to [VivaPipeline].
   final String preferProvider;
@@ -112,6 +116,7 @@ Future<ToolResult> runPipelineTool(Context ctx, HostArgs args) {
         'count': args.count,
         if (args.contentId != null) 'content_id': args.contentId,
         'dry_run': args.dryRun,
+        'mute': args.mute,
       },
     ),
   );

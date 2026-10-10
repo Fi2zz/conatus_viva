@@ -218,14 +218,18 @@ void main() {
   VivaPipeline makePipeline() =>
       VivaPipeline(cfg: makeConfig(), http: mock.client, baseDir: tmp.path);
 
-  PipelineInput makeInput({String contentId = 't1', bool dryRun = false}) =>
-      PipelineInput(
-        photos: photoPaths,
-        dialect: '河南',
-        count: 4,
-        contentId: contentId,
-        dryRun: dryRun,
-      );
+  PipelineInput makeInput({
+    String contentId = 't1',
+    bool dryRun = false,
+    bool mute = false,
+  }) => PipelineInput(
+    photos: photoPaths,
+    dialect: '河南',
+    count: 4,
+    contentId: contentId,
+    dryRun: dryRun,
+    mute: mute,
+  );
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('conatus_orchestrator_test');
@@ -316,6 +320,19 @@ void main() {
     expect(dryRun['default'], false);
     final photos = properties['photos'] as Map<String, Object?>;
     expect(photos['type'], 'array');
+  });
+
+  test('mute skips tts and still completes with silent tracks', () async {
+    final result = await makePipeline().run(makeInput(mute: true));
+
+    expect(result.status, 'completed', reason: result.error);
+    expect(mock.ttsCalls, 0);
+    final work = Workdir(tmp.path, 't1');
+    expect(work.file(ArtifactPaths.finalVideo).existsSync(), isTrue);
+    expect(work.file(ArtifactPaths.finalSrt).existsSync(), isTrue);
+    // Silent tracks were generated locally and measured.
+    expect(work.file('04_audio/seg_0.wav').existsSync(), isTrue);
+    expect(work.file(ArtifactPaths.durations).existsSync(), isTrue);
   });
 
   test('dialect unknown region still completes via mandarin', () async {

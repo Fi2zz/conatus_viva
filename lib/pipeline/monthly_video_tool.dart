@@ -44,6 +44,11 @@ class GenerateMonthlyVideoTool extends Tool {
       description: '只跑到 tts，返回分段路由与成本预估，不渲染',
       defaultValue: false,
     ),
+    ParamSpec.boolean(
+      'mute',
+      description: '跳过配音，用静音音轨出片（字幕照常）',
+      defaultValue: false,
+    ),
   ];
 
   @override
@@ -73,6 +78,7 @@ class GenerateMonthlyVideoTool extends Tool {
       count: context.integer('count') ?? 4,
       contentId: context.string('content_id') ?? _defaultContentId(),
       dryRun: context.boolean('dry_run') ?? false,
+      mute: context.boolean('mute') ?? false,
     );
   }
 

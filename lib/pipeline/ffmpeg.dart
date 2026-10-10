@@ -51,10 +51,28 @@ Future<double> mediaDurationSeconds(File media) async {
   return seconds;
 }
 
+/// Silent wav of [seconds] at 24kHz mono — the `--mute` narration
+/// placeholder, same format the TTS step requests.
+List<String> silentWavArgs({required double seconds, required File out}) => [
+  '-y',
+  '-f',
+  'lavfi',
+  '-i',
+  'anullsrc=r=24000:cl=mono',
+  '-t',
+  seconds.toStringAsFixed(3),
+  '-c:a',
+  'pcm_s16le',
+  // Explicit format: the caller writes to a `.tmp` name first (atomic
+  // publish), so ffmpeg cannot infer wav from the extension.
+  '-f',
+  'wav',
+  out.path,
+];
+
 /// Run `ffmpeg` with [args]; throws [FfmpegException] (non-zero exit)
 /// carrying ffmpeg's stderr.
-Future<void> runFfmpeg(List<String> args) async {
-  final r = await Process.run('ffmpeg', args);
+Future<void> runFfmpeg(List<String> args) async {  final r = await Process.run('ffmpeg', args);
   if (r.exitCode != 0) {
     throw FfmpegException(exitCode: r.exitCode, stderr: _diagnostics(r));
   }

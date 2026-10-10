@@ -13,8 +13,30 @@ void main() {
     expect(c.i2vWatermark, isTrue);
     expect(c.i2vSeed, 42);
     expect(c.targetCount, 4);
-    expect(c.baseUrl, 'https://dashscope.aliyuncs.com/compatible-mode/v1');
+    // The repo config carries a workspace_id → every DashScope-family
+    // endpoint (LLM baseUrl included) lands on the workspace maas host.
+    expect(c.workspaceId, isNotEmpty);
+    expect(
+      c.baseUrl,
+      'https://${c.workspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(
+      c.apiHost,
+      'https://${c.workspaceId}.cn-beijing.maas.aliyuncs.com',
+    );
     expect(c.ossPrefix, 'pipeline-exp/');
+  });
+
+  test('empty workspace_id keeps the default dashscope host', () async {
+    final tmp = Directory.systemTemp.createTempSync('conatus_config_test');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final file = File('${tmp.path}/cfg.json')
+      ..writeAsStringSync('{"workspace_id": ""}');
+
+    final c = await PipelineConfig.load(file: file, env: {});
+
+    expect(c.apiHost, PipelineConfig.defaultApiHost);
+    expect(c.baseUrl, PipelineConfig.defaultBaseUrl);
   });
 
   test('requireApiKey throws without env var', () async {

@@ -11,6 +11,7 @@ import 'bailian/uploader.dart';
 import 'config.dart';
 import 'dialect_map.dart';
 import 'errors.dart';
+import 'ffmpeg.dart';
 import 'state.dart';
 import 'steps/classify.dart';
 import 'steps/compose.dart';
@@ -28,6 +29,7 @@ class PipelineInput {
     required this.count,
     required this.contentId,
     required this.dryRun,
+    this.mute = false,
   });
 
   /// Local paths or `http(s)://` URLs (ingest accepts both, spec §3.1).
@@ -40,6 +42,10 @@ class PipelineInput {
 
   /// `true` → stop after tts and return the cost plan without rendering.
   final bool dryRun;
+
+  /// `true` → skip TTS entirely and fill silent narration tracks locally
+  /// (subtitles still render); the video path works without TTS access.
+  final bool mute;
 }
 
 /// Per-segment outcome of a run (planned in dry-run, final otherwise).
@@ -529,13 +535,15 @@ class VivaPipeline {
     return VideoScript(segments: segments, totalChars: total);
   }
 
-  /// 04 tts — the step self-skips on a valid `durations.json`.
+  /// 04 tts — the step self-skips on a valid `durations.json`. The mute
+  /// path bypasses TTS entirely with local silent tracks.
   Future<List<TtsAudio>> _synthesize(
     VideoScript script,
     PipelineInput input,
     Workdir work,
     ContentState state,
   ) {
+    if (input.mute) return _silence(script, work, state);
     return runTtsStep(
       script: script,
       dialect: resolveDialect(input.dialect),
@@ -544,6 +552,67 @@ class VivaPipeline {
       work: work,
       state: state,
     );
+  }
+
+  /// `--mute`: per-segment silent wavs via ffmpeg (anullsrc, 24kHz mono),
+  /// paced from line length (~4 chars/s, clamped 2–6s). `durations.json`
+  /// is written so a rerun skips regeneration, and the tts step record is
+  /// marked succeeded like a real synthesis.
+  Future<List<TtsAudio>> _silence(
+    VideoScript script,
+    Workdir work,
+    ContentState state,
+  ) async {
+    final reused = _silentFromDurations(script, work);
+    if (reused != null) return reused;
+    final record = state.step('tts');
+    record.status = StepStatus.running;
+    record.attempts += 1;
+    record.t.add('start');
+    work.dirOf(ArtifactPaths.audioDir).createSync(recursive: true);
+    final audios = <TtsAudio>[];
+    for (var i = 0; i < script.segments.length; i++) {
+      final seconds = _silentSeconds(script.segments[i].line);
+      final wav = work.file('${ArtifactPaths.audioDir}/seg_$i.wav');
+      final tmp = File('${wav.path}.tmp');
+      await runFfmpeg(silentWavArgs(seconds: seconds, out: tmp));
+      tmp.renameSync(wav.path);
+      audios.add(TtsAudio(wav: wav, seconds: seconds));
+      _emitProgress('[04] 段 $i：静音 ${seconds.toStringAsFixed(0)}s（mute）');
+    }
+    _writeJson(work, ArtifactPaths.durations, [
+      for (final audio in audios) audio.seconds,
+    ]);
+    record.status = StepStatus.succeeded;
+    record.t.add('end');
+    state.save();
+    return audios;
+  }
+
+  /// Reuses a previous mute run's `durations.json` + wavs when present and
+  /// complete for this script's segment count; null otherwise.
+  List<TtsAudio>? _silentFromDurations(VideoScript script, Workdir work) {
+    if (!stepDone(work, ArtifactPaths.durations)) return null;
+    final Object? decoded =
+        jsonDecode(work.file(ArtifactPaths.durations).readAsStringSync());
+    if (decoded is! List || decoded.length != script.segments.length) {
+      return null;
+    }
+    return <TtsAudio>[
+      for (var i = 0; i < decoded.length; i++)
+        TtsAudio(
+          wav: work.file('${ArtifactPaths.audioDir}/seg_$i.wav'),
+          seconds: (decoded[i] as num).toDouble(),
+        ),
+    ];
+  }
+
+  /// Narration pace ≈4 chars/s, clamped to [2, 6] seconds per segment.
+  double _silentSeconds(String line) {
+    final paced = (line.length / 4).ceil();
+    if (paced < 2) return 2;
+    if (paced > 6) return 6;
+    return paced.toDouble();
   }
 
   /// 05 render — the step self-skips on `05_clips/status.json`.

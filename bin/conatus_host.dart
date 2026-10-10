@@ -37,6 +37,7 @@ ArgParser buildParser() {
     ..addOption('count', abbr: 'n', defaultsTo: '4', help: '入选照片数上限')
     ..addOption('content-id', help: '内容 ID（缺省按时间生成）')
     ..addFlag('dry-run', help: '只跑到配音，返回成本预估，不渲染')
+    ..addFlag('mute', help: '跳过配音，静音音轨出片（字幕照常）')
     ..addOption('agent', help: '自然语言任务，交给 agent loop 执行')
     ..addOption(
       'prefer-provider',
@@ -97,6 +98,7 @@ HostArgs? parseArgs(ArgResults results, ArgParser parser) {
     count: count,
     contentId: results['content-id'] as String?,
     dryRun: results.flag('dry-run'),
+    mute: results.flag('mute'),
     agentTask: results['agent'] as String?,
     preferProvider: results['prefer-provider'] as String,
   );
