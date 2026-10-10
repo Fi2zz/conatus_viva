@@ -129,6 +129,7 @@ class VivaPipeline {
     ImageUrlProvider? urls,
     http.Client? http,
     this.baseDir = 'pipeline_out',
+    this.preferProvider = 'dashscope',
   }) {
     _llm = llm;
     _tts = tts;
@@ -141,6 +142,11 @@ class VivaPipeline {
 
   /// Artifact root; runs land in `$baseDir/<contentId>/`.
   final String baseDir;
+
+  /// Default [ImageUrlProvider] preference (`'dashscope'` | `'oss'`), used
+  /// only when no explicit `urls` provider was injected (CLI
+  /// `--prefer-provider`).
+  final String preferProvider;
 
   QwenClient? _llm;
   TtsClient? _tts;
@@ -170,7 +176,7 @@ class VivaPipeline {
       _i2v ??= I2vClient(apiKey: cfg.requireApiKey(), client: _client);
 
   ImageUrlProvider get _urlProvider =>
-      _urls ??= pickProvider(prefer: 'dashscope', cfg: cfg, client: _client);
+      _urls ??= pickProvider(prefer: preferProvider, cfg: cfg, client: _client);
 
   /// Runs the pipeline once; a [PipelineError] from any step becomes a
   /// `failed` result (the error already landed in `state.json`).
