@@ -133,7 +133,12 @@ void main() {
       reason: '人物未识别的照片同样按人物路线处理',
     );
     final motion = script.segments[2].motionPrompt!;
-    expect(motion, contains('主体保持静止，仅背景与光影缓慢变化'));
+    expect(motion, contains('主体保持静止'));
+    expect(
+      motion,
+      contains('主体保持静止，仅背景与光影微动'),
+      reason: '硬约束句与 spec §4-03 原文逐字一致',
+    );
     expect(motion, contains('镜头缓慢左移'), reason: 'motion_hint 并入模板');
     expect(motion, isNot('随便写写'), reason: '动效由代码合成而非模型输出');
   });

@@ -37,9 +37,10 @@ class VideoScript {
   final int totalChars;
 }
 
-/// The hard-constraint sentence of the fixed motion template (spec §4-03).
-/// Every composed `motion_prompt` carries it verbatim.
-const String _staticSubjectConstraint = '主体保持静止，仅背景与光影缓慢变化';
+/// The hard-constraint sentence of the fixed motion template, verbatim from
+/// spec §4-03 (the authority over the plan's misquote). Every composed
+/// `motion_prompt` carries it verbatim.
+const String _staticSubjectConstraint = '主体保持静止，仅背景与光影微动';
 
 /// Fixed motion template composed with the classify `motion_hint` for
 /// non-person (i2v) segments; MUST contain [_staticSubjectConstraint].
@@ -49,9 +50,9 @@ const String _motionTemplate = '$_staticSubjectConstraint，镜头平滑缓慢�
 /// Chinese, 60–80 chars total, a JSON array of segments. [QwenClient.chatJson]
 /// appends its own no-fences / no-explanation instruction on top of this.
 const String _systemPrompt = '''
-为月度相册视频撰写分段口播稿。只输出一个 JSON 对象：
+为月度相册视频撰写分段口播稿。只输出一个 JSON 对象，且对象仅含 segments 一个字段：
 {"segments": [{"photo": "照片id", "line": "口播台词"}, ...]}
-- segments 必须是 JSON 数组，元素与用户给出的照片一一对应：photo 原样引用照片 id，顺序一致
+- segments 字段的值必须是 JSON 数组，元素与用户给出的照片一一对应：photo 原样引用照片 id，顺序一致
 - line：每段一句，标准书面中文，约 15–20 字，最多 40 字
 - 所有 line 合计 60–80 字，围绕画面内容平实叙述，前后连贯
 - line 只写口播台词本身，不得包含方括号控制标签（如 [very slowly]）
