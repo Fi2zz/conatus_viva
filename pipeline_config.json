@@ -1,0 +1,29 @@
+{
+  "llm": {
+    "model": "qwen3.8-flash"
+  },
+  "tts": {
+    "model": "qwen-audio-3.1-tts-flash",
+    "voice_id": null,
+    "fallback_model": "qwen3-tts-flash",
+    "fallback_voice": "<M0 从官方音色列表选定后填入>"
+  },
+  "i2v": {
+    "model": "wan2.6-i2v-flash",
+    "resolution": "720P",
+    "watermark": true,
+    "seed": 42,
+    "poll_seconds": 15,
+    "max_wait_minutes": 10
+  },
+  "oss": {
+    "bucket": "",
+    "endpoint": "",
+    "prefix": ""
+  },
+  "video": {
+    "target_count": 4,
+    "min_clip_s": 2,
+    "max_clip_s": 15
+  }
+}
