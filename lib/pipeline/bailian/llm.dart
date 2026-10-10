@@ -50,19 +50,21 @@ class QwenClient {
   /// One chat completion. [images] are read as raw bytes and inlined in the
   /// user content array as `data:image/jpeg;base64` URLs.
   ///
-  /// Throws [PipelineError] per the class mapping documented on [QwenClient].
+  /// Throws [PipelineError] per the class mapping documented on [QwenClient];
+  /// an unreadable [images] file is fatal (it will not self-heal).
   Future<String> chat({
     required String system,
     required String user,
     List<File>? images,
     int maxRetries = 2,
   }) async {
+    final retries = maxRetries < 0 ? 0 : maxRetries;
     final messages = _messages(system, user, images);
     for (var attempt = 0; ; attempt++) {
       try {
         return await _requestOnce(messages);
       } on PipelineError catch (e) {
-        if (e.cls != ErrorClass.transient || attempt >= maxRetries) rethrow;
+        if (e.cls != ErrorClass.transient || attempt >= retries) rethrow;
         await sleep(_delayFor(attempt));
       }
     }
@@ -77,9 +79,10 @@ class QwenClient {
     List<File>? images,
     int maxRetries = 2,
   }) async {
+    final retries = maxRetries < 0 ? 0 : maxRetries;
     final messages = _messages('$system$_jsonOnlyInstruction', user, images);
     Object? lastFailure;
-    for (var attempt = 0; attempt <= maxRetries; attempt++) {
+    for (var attempt = 0; attempt <= retries; attempt++) {
       if (attempt > 0) await sleep(_delayFor(attempt - 1));
       try {
         final decoded = jsonDecode(_stripFences(await _requestOnce(messages)));
@@ -131,7 +134,14 @@ class QwenClient {
       <String, dynamic>{'type': 'text', 'text': user},
     ];
     for (final image in images) {
-      final encoded = base64Encode(image.readAsBytesSync());
+      final List<int> bytes;
+      try {
+        bytes = image.readAsBytesSync();
+      } on FileSystemException catch (e) {
+        // A missing/unreadable photo will not self-heal on retry.
+        throw PipelineError(ErrorClass.fatal, 'cannot read image: $e');
+      }
+      final encoded = base64Encode(bytes);
       parts.add(<String, dynamic>{
         'type': 'image_url',
         'image_url': <String, dynamic>{
@@ -167,12 +177,27 @@ class QwenClient {
     }
 
     final status = response.statusCode;
-    if (status == 200) return _extractContent(response.body);
-    final detail = _errorDetail(response.body);
+    final body = _bodyOf(response);
+    if (status == 200) return _extractContent(body);
+    final detail = _errorDetail(body);
     if (status == 408 || status == 429 || status >= 500) {
       throw PipelineError(ErrorClass.transient, 'LLM HTTP $status: $detail');
     }
     throw PipelineError(ErrorClass.fatal, 'LLM HTTP $status: $detail');
+  }
+
+  /// Decodes [response.body]. Malformed UTF-8 from the server throws inside
+  /// the decoder, so it is classified here as transient — the bytes are
+  /// server-side and may self-heal on the next attempt.
+  String _bodyOf(http.Response response) {
+    try {
+      return response.body;
+    } catch (e) {
+      throw PipelineError(
+        ErrorClass.transient,
+        'LLM response body decode failed: $e',
+      );
+    }
   }
 
   /// `choices[0].message.content` of a 200 reply. A malformed envelope is

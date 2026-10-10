@@ -169,4 +169,72 @@ void main() {
     expect(result, <String, dynamic>{'a': 2});
     expect(calls, 2);
   });
+
+  test('missing image file maps to fatal PipelineError', () async {
+    var calls = 0;
+    final client = makeClient(
+      MockClient((request) async {
+        calls++;
+        return chatOk('unreachable');
+      }),
+    );
+    client.sleep = (_) async {};
+
+    await expectLater(
+      client.chat(
+        system: 's',
+        user: 'u',
+        images: [File('${tmp.path}/gone.jpg')], // never created
+      ),
+      throwsA(
+        isA<PipelineError>().having((e) => e.cls, 'cls', ErrorClass.fatal),
+      ),
+    );
+    expect(calls, 0); // fails before any HTTP request
+  });
+
+  test('malformed response body maps to transient and retries', () async {
+    var calls = 0;
+    final client = makeClient(
+      MockClient((request) async {
+        calls++;
+        // Invalid UTF-8 bytes: decoding response.body throws FormatException.
+        return http.Response.bytes(
+          const <int>[0xFF, 0xFE, 0xC3],
+          200,
+          headers: <String, String>{'content-type': 'application/json'},
+        );
+      }),
+    );
+    client.sleep = (_) async {};
+
+    await expectLater(
+      client.chat(system: 's', user: 'u'),
+      throwsA(
+        isA<PipelineError>().having((e) => e.cls, 'cls', ErrorClass.transient),
+      ),
+    );
+    expect(calls, 3); // initial + 2 retries — proves transient, not fatal
+  });
+
+  test('negative maxRetries attempts exactly once for both methods', () async {
+    var calls = 0;
+    final client = makeClient(
+      MockClient((request) async {
+        calls++;
+        return chatOk('{"a":1}');
+      }),
+    );
+    client.sleep = (_) async {};
+
+    expect(
+      await client.chat(system: 's', user: 'u', maxRetries: -1),
+      '{"a":1}',
+    );
+    expect(
+      await client.chatJson(system: 's', user: 'u', maxRetries: -1),
+      <String, dynamic>{'a': 1},
+    );
+    expect(calls, 2); // one request per method
+  });
 }
