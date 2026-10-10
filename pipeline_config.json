@@ -19,7 +19,7 @@
   "oss": {
     "bucket": "",
     "endpoint": "",
-    "prefix": ""
+    "prefix": "pipeline-exp/"
   },
   "video": {
     "target_count": 4,

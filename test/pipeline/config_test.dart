@@ -14,6 +14,7 @@ void main() {
     expect(c.i2vSeed, 42);
     expect(c.targetCount, 4);
     expect(c.baseUrl, 'https://dashscope.aliyuncs.com/compatible-mode/v1');
+    expect(c.ossPrefix, 'pipeline-exp/');
   });
 
   test('requireApiKey throws without env var', () async {

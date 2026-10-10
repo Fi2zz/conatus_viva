@@ -89,7 +89,7 @@ class PipelineConfig {
       i2vMaxWaitMinutes: _int(i2v, 'max_wait_minutes', 10),
       ossBucket: _string(oss, 'bucket', ''),
       ossEndpoint: _string(oss, 'endpoint', ''),
-      ossPrefix: _string(oss, 'prefix', ''),
+      ossPrefix: _string(oss, 'prefix', 'pipeline-exp/'),
       targetCount: _int(video, 'target_count', 4),
       minClipS: _int(video, 'min_clip_s', 2),
       maxClipS: _int(video, 'max_clip_s', 15),
