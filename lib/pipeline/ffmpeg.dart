@@ -60,6 +60,21 @@ Future<void> runFfmpeg(List<String> args) async {
   }
 }
 
+/// Per-stream duration of [media] in seconds (`stream=duration` for
+/// [selector], e.g. `v:0` / `a:0`). Throws [FfmpegException] when ffprobe
+/// fails or the stream carries no parseable duration.
+Future<double> streamDurationSeconds(File media, String selector) async {
+  final r = await Process.run('ffprobe', [
+    '-v', 'quiet', '-select_streams', selector,
+    '-show_entries', 'stream=duration', '-of', 'csv=p=0', media.path,
+  ]);
+  final seconds = double.tryParse((r.stdout as String).trim());
+  if (r.exitCode != 0 || seconds == null) {
+    throw FfmpegException(exitCode: r.exitCode, stderr: _diagnostics(r));
+  }
+  return seconds;
+}
+
 /// Ken Burns: still image [img] → exactly [durationS] seconds of
 /// 1280x720 / 24 fps h264 (`zoompan`, gentle zoom-in, center crop).
 List<String> kenBurnsArgs({

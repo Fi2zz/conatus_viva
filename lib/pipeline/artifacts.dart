@@ -37,6 +37,10 @@ abstract final class ArtifactPaths {
   /// `05_clips/status.json` — per-segment render/download status.
   static const String renderStatus = '05_clips/status.json';
 
+  /// `06_concat/` — per-segment muxed parts awaiting the final concat
+  /// (compose intermediate).
+  static const String concatDir = '06_concat';
+
   /// `06_final.mp4` — composed video (compose output).
   static const String finalVideo = '06_final.mp4';
 
