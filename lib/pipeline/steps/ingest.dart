@@ -49,10 +49,12 @@ class IngestedPhoto {
 ///   file is reused as-is and **no HTTP request is issued** (idempotent rerun).
 /// - Local input → the `File` reference passes through unchanged; nothing is
 ///   copied and `00_inputs/` may stay absent.
-/// - Empty [photos] → [PipelineError] with [ErrorClass.fatal]; a failed
+/// - Empty [photos] and a malformed input URL → [ErrorClass.fatal]; a failed
 ///   download (network error, timeout, non-2xx) → [ErrorClass.transient];
 ///   an unwritable `00_inputs/` → [ErrorClass.fatal] (a disk fault will not
-///   self-heal, mirroring the QwenClient local-file mapping).
+///   self-heal, mirroring the QwenClient local-file mapping). The directory
+///   is created before the fetch, so a fatal disk error never wastes a
+///   download.
 ///
 /// [client] is injected in tests (`package:http/testing.dart`); when omitted
 /// an internal client is created for the duration of the call and closed
@@ -102,7 +104,16 @@ Future<IngestedPhoto> _ingestOne(
     );
   }
 
-  final uri = Uri.parse(input);
+  final Uri uri;
+  try {
+    uri = Uri.parse(input);
+  } on FormatException catch (e) {
+    // A malformed URL is an input defect; retrying cannot repair it.
+    throw PipelineError(
+      ErrorClass.fatal,
+      'ingest cannot parse url: $input ($e)',
+    );
+  }
   final fileName = _urlFileName(uri);
   final id = '${seq}_${_stem(fileName)}';
   final rel = '${ArtifactPaths.inputsDir}/${seq}_$fileName';
@@ -119,9 +130,21 @@ Future<IngestedPhoto> _ingestOne(
     );
   }
 
+  // Create the artifact dir before fetching, so an unwritable disk fails as
+  // fatal (spec §6) without spending bytes on a download that cannot land.
+  // The classification matters: a raw FileSystemException would escape the
+  // error taxonomy.
+  try {
+    work.dirOf(ArtifactPaths.inputsDir).createSync(recursive: true);
+  } on FileSystemException catch (e) {
+    throw PipelineError(
+      ErrorClass.fatal,
+      'ingest cannot create ${ArtifactPaths.inputsDir}: $e',
+    );
+  }
+
   final http.Response response = await _fetch(client, uri);
 
-  work.dirOf(ArtifactPaths.inputsDir).createSync(recursive: true);
   try {
     // Write to a temp name then rename, so an interrupted write never
     // leaves a partial file that a rerun would treat as a valid copy.

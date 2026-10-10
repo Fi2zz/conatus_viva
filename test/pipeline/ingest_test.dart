@@ -124,6 +124,49 @@ void main() {
     );
   });
 
+  test('unwritable inputs dir is fatal before any download', () async {
+    // 00_inputs pre-created as a FILE: the directory cannot be created.
+    work.file('00_inputs').writeAsStringSync('not a directory');
+
+    var calls = 0;
+    final client = MockClient((request) async {
+      calls++;
+      return http.Response.bytes(jpegBytes, 200);
+    });
+
+    await expectLater(
+      runIngest(
+        photos: <String>['https://cdn.example.test/p1.jpg'],
+        work: work,
+        client: client,
+      ),
+      throwsA(
+        isA<PipelineError>().having((e) => e.cls, 'cls', ErrorClass.fatal),
+      ),
+    );
+    expect(
+      calls,
+      0,
+      reason: 'disk checked before fetching, so no wasted download',
+    );
+  });
+
+  test('malformed url input is fatal', () async {
+    await expectLater(
+      runIngest(
+        // Invalid port — Uri.parse throws FormatException.
+        photos: <String>['https://host:notaport/p1.jpg'],
+        work: work,
+        client: MockClient(
+          (_) async => throw http.ClientException('unreachable'),
+        ),
+      ),
+      throwsA(
+        isA<PipelineError>().having((e) => e.cls, 'cls', ErrorClass.fatal),
+      ),
+    );
+  });
+
   test('url download failure is transient', () async {
     await expectLater(
       runIngest(
