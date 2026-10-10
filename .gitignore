@@ -48,3 +48,6 @@ app.*.map.json
 pipeline_out/
 *.env
 secrets/
+
+# local pipeline config (contains workspace_id) — see pipeline_config.example.json
+pipeline_config.json
