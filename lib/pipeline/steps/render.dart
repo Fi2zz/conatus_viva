@@ -40,6 +40,7 @@ class _RenderContext {
     required this.cfg,
     required this.sleep,
     required this.now,
+    this.onProgress,
   });
 
   final List<SegmentScript> scripts;
@@ -50,6 +51,9 @@ class _RenderContext {
   final I2vClient i2v;
   final ImageUrlProvider urls;
   final PipelineConfig cfg;
+
+  /// Human-readable progress sink (the CLI prints these); null in tests.
+  final void Function(String message)? onProgress;
 
   /// Waits between polls/retries. Tests pass a no-op so the suite never
   /// waits out the real 15s poll interval.
@@ -95,12 +99,14 @@ Future<void> runRenderStep({
   required PipelineConfig cfg,
   Future<void> Function(Duration delay)? sleep,
   DateTime Function()? now,
+  void Function(String message)? onProgress,
 }) async {
   if (stepDone(work, ArtifactPaths.renderStatus)) return;
   final ctx = _RenderContext(
     scripts: scripts, audios: audios, photos: photos, work: work,
     state: state, i2v: i2v, urls: urls, cfg: cfg,
     sleep: sleep ?? _RenderContext.realSleep, now: now ?? DateTime.now,
+    onProgress: onProgress,
   );
   if (audios.length != scripts.length) {
     throw PipelineError(
@@ -149,7 +155,10 @@ Future<void> _renderSegment(_RenderContext ctx, int i) async {
   final clip = _clipFile(ctx.work, i);
   final finished =
       seg.status == SegmentStatus.succeeded || seg.status == SegmentStatus.degraded;
-  if (finished && clip.existsSync() && clip.lengthSync() > 0) return;
+  if (finished && clip.existsSync() && clip.lengthSync() > 0) {
+    _emitProgress(ctx, '段 $i/${ctx.scripts.length}：已完成，跳过');
+    return;
+  }
   final kenBurnsRoute =
       photo.hasPerson || photo.personUnknown || seg.route == SegmentState.routeKenburns;
   if (kenBurnsRoute) {
@@ -216,6 +225,10 @@ String _stem(String path) {
   return cut <= 0 ? name : name.substring(0, cut);
 }
 
+/// Reports a human-readable progress line to the host; a no-op in tests.
+void _emitProgress(_RenderContext ctx, String message) =>
+    ctx.onProgress?.call(message);
+
 /// Ken Burns route: zoompan render straight to the segment clip (zero cost).
 /// A degraded segment keeps its `degraded` status — the clip exists but the
 /// audit rejection stays on record.
@@ -226,6 +239,7 @@ Future<void> _renderKenBurns(
 ) async {
   final clip = _clipFile(ctx.work, seg.i);
   final tmp = File('${clip.path}.tmp.mp4');
+  _emitProgress(ctx, '段 ${seg.i}：Ken Burns 渲染（${seg.durationS}s）…');
   try {
     await runFfmpeg(
       kenBurnsArgs(img: _photoFile(ctx.work, photo.id), durationS: seg.durationS, out: tmp),
@@ -236,6 +250,7 @@ Future<void> _renderKenBurns(
   }
   if (seg.status != SegmentStatus.degraded) seg.markSucceeded();
   ctx.state.save();
+  _emitProgress(ctx, '段 ${seg.i}：Ken Burns 片段就绪');
 }
 
 /// i2v route with resume gate and retry ×2 (spec §6).
@@ -245,6 +260,7 @@ Future<void> _renderI2v(
   PhotoInfo photo,
 ) async {
   String? taskId = _resumeTaskId(seg, ctx.now);
+  if (taskId != null) _emitProgress(ctx, '段 ${seg.i}：恢复已提交任务 $taskId，继续轮询');
   for (var failures = 0; ; ) {
     try {
       taskId ??= await _submit(ctx, seg, photo);
@@ -275,6 +291,7 @@ String? _resumeTaskId(SegmentState seg, DateTime Function() now) {
 /// Publishes the photo, submits the task, and persists the task id
 /// immediately (the 24h resume window starts here).
 Future<String> _submit(_RenderContext ctx, SegmentState seg, PhotoInfo photo) async {
+  _emitProgress(ctx, '段 ${seg.i}：上传照片并提交万相（${seg.durationS}s）…');
   final published = await ctx.urls.publish(_photoFile(ctx.work, photo.id));
   final task = await ctx.i2v.submit(
     imgUrl: published.url,
@@ -283,6 +300,7 @@ Future<String> _submit(_RenderContext ctx, SegmentState seg, PhotoInfo photo) as
   );
   seg.markSubmitted(task.taskId, now: ctx.now());
   ctx.state.save();
+  _emitProgress(ctx, '段 ${seg.i}：任务 ${task.taskId} 已提交，等待渲染');
   return task.taskId;
 }
 
@@ -290,7 +308,7 @@ Future<String> _submit(_RenderContext ctx, SegmentState seg, PhotoInfo photo) as
 /// level cost is recorded only after the bytes are on disk (a killed
 /// process then never bills an un-downloaded task).
 Future<void> _finishTask(_RenderContext ctx, SegmentState seg, String taskId) async {
-  final task = await _pollUntilTerminal(ctx, taskId);
+  final task = await _pollUntilTerminal(ctx, seg, taskId);
   if (task.status == I2vStatus.failed) {
     final code = task.errorCode ?? 'unknown';
     if (_auditRejected(code)) throw _AuditReject(code);
@@ -299,8 +317,13 @@ Future<void> _finishTask(_RenderContext ctx, SegmentState seg, String taskId) as
   await _downloadClip(ctx, seg, task);
 }
 
-Future<I2vTask> _pollUntilTerminal(_RenderContext ctx, String taskId) async {
-  final deadline = ctx.now().add(Duration(minutes: ctx.cfg.i2vMaxWaitMinutes));
+Future<I2vTask> _pollUntilTerminal(
+  _RenderContext ctx,
+  SegmentState seg,
+  String taskId,
+) async {
+  final startedAt = ctx.now();
+  final deadline = startedAt.add(Duration(minutes: ctx.cfg.i2vMaxWaitMinutes));
   I2vStatus? lastSeen;
   for (;;) {
     final task = await ctx.i2v.poll(taskId);
@@ -308,6 +331,8 @@ Future<I2vTask> _pollUntilTerminal(_RenderContext ctx, String taskId) async {
       lastSeen = task.status;
       ctx.state.save(); // every poll state change lands on disk
     }
+    final waited = ctx.now().difference(startedAt).inSeconds;
+    _emitProgress(ctx, '段 ${seg.i}：渲染中（${task.status.name}，已等 ${waited}s）…');
     if (task.status != I2vStatus.running) return task;
     if (ctx.now().isAfter(deadline)) {
       throw PipelineError(ErrorClass.fatal, 'i2v task $taskId timed out');
@@ -326,11 +351,13 @@ Future<void> _downloadClip(_RenderContext ctx, SegmentState seg, I2vTask task) a
   }
   seg.markDownloading();
   ctx.state.save();
+  _emitProgress(ctx, '段 ${seg.i}：渲染完成，下载片段…');
   final bytes = await ctx.i2v.downloadClip(url);
   _storeClip(_clipFile(ctx.work, seg.i), bytes);
   seg.markSucceeded();
   ctx.state.cost.recordI2vSeconds(seg.durationS);
   ctx.state.save();
+  _emitProgress(ctx, '段 ${seg.i}：i2v 片段就绪（计费 ${seg.durationS}s）');
 }
 
 void _storeClip(File dest, List<int> bytes) {

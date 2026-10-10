@@ -88,10 +88,15 @@ String _extension(String path) {
 Future<Context> createHost({
   required PipelineConfig cfg,
   String preferProvider = 'dashscope',
+  void Function(String message)? onProgress,
 }) async {
   final ctx = Context.root(name: 'conatus-host');
   final tools = provideTools(ctx);
-  final pipeline = VivaPipeline(cfg: cfg, preferProvider: preferProvider);
+  final pipeline = VivaPipeline(
+    cfg: cfg,
+    preferProvider: preferProvider,
+    onProgress: onProgress,
+  );
   ctx.track(tools.register(GenerateMonthlyVideoTool(pipeline: pipeline)));
   return ctx;
 }

@@ -130,6 +130,7 @@ class VivaPipeline {
     http.Client? http,
     this.baseDir = 'pipeline_out',
     this.preferProvider = 'dashscope',
+    this.onProgress,
   }) {
     _llm = llm;
     _tts = tts;
@@ -147,6 +148,13 @@ class VivaPipeline {
   /// only when no explicit `urls` provider was injected (CLI
   /// `--prefer-provider`).
   final String preferProvider;
+
+  /// Human-readable progress sink (step transitions + render segment
+  /// detail); the CLI prints these to stderr. Null in tests.
+  final void Function(String message)? onProgress;
+
+  /// Reports one progress line to the host.
+  void _emitProgress(String message) => onProgress?.call(message);
 
   QwenClient? _llm;
   TtsClient? _tts;
@@ -166,14 +174,17 @@ class VivaPipeline {
     client: _client,
   );
 
-  TtsClient get _ttsClient =>
-      _tts ??= TtsClient(apiKey: cfg.requireApiKey(), client: _client);
+  TtsClient get _ttsClient => _tts ??= TtsClient(
+    apiKey: cfg.requireApiKey(),
+    client: _client,
+    host: cfg.apiHost,
+  );
 
   // QwenClient/I2vClient pin their model params as private named fields, so
   // only the apiKey/baseUrl/client are configurable here; their defaults
   // match pipeline_config.json (Task 14 report notes this gap).
   I2vClient get _i2vClient =>
-      _i2v ??= I2vClient(apiKey: cfg.requireApiKey(), client: _client);
+      _i2v ??= I2vClient(apiKey: cfg.requireApiKey(), client: _client, host: cfg.apiHost);
 
   ImageUrlProvider get _urlProvider =>
       _urls ??= pickProvider(prefer: preferProvider, cfg: cfg, client: _client);
@@ -186,17 +197,33 @@ class VivaPipeline {
     final work = Workdir(baseDir, input.contentId);
     final state = ContentState.load(work.dir);
     _initRun(input, work, state);
+    _emitProgress('开始：${input.photos.length} 张照片，方言=${input.dialect}，content_id=${input.contentId}');
     try {
+      _emitProgress('[00] 收集照片…');
       final ingested = await _ingest(input, work, state);
+      _emitProgress('[01] 识别照片内容（${ingested.length} 张）…');
       final classified = await _classify(ingested, work, state);
       final selected = _select(classified, ingested, input, work, state);
+      _emitProgress('[02] 已选 ${selected.length} 张');
+      _emitProgress('[03] 撰写口播文案…');
       final script = await _script(selected, work, state);
+      _emitProgress('[04] 合成方言配音（${script.segments.length} 段）…');
       final audios = await _synthesize(script, input, work, state);
-      if (input.dryRun) return _dryRun(input, selected, script, audios);
+      if (input.dryRun) {
+        _emitProgress('dry-run：到此为止，返回成本预估');
+        return _dryRun(input, selected, script, audios);
+      }
+      _emitProgress('[05] 渲染视频段（i2v 每段约 1–3 分钟，请耐心）…');
       await _render(script, audios, selected, work, state);
+      _emitProgress('[06] 合成成片…');
       await _compose(script, audios, work, state);
-      return _completed(input, work, state);
+      final result = _completed(input, work, state);
+      _emitProgress(
+        '完成：${result.videoPath}（预估 ¥${result.estimatedYuan.toStringAsFixed(2)}）',
+      );
+      return result;
     } on PipelineError catch (e) {
+      _emitProgress('失败：${e.message}（详见 ${work.dir}/state.json）');
       return _failed(input, e.message);
     }
   }
@@ -536,6 +563,7 @@ class VivaPipeline {
       i2v: _i2vClient,
       urls: _urlProvider,
       cfg: cfg,
+      onProgress: onProgress,
     );
   }
 

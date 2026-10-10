@@ -57,7 +57,12 @@ Future<int> run(ArgResults results, ArgParser parser) async {
     stderr.writeln(e.message);
     return exitCodeMissingEnv;
   }
-  final ctx = await createHost(cfg: cfg, preferProvider: args.preferProvider);
+  final startedAt = DateTime.now();
+  final ctx = await createHost(
+    cfg: cfg,
+    preferProvider: args.preferProvider,
+    onProgress: (message) => printProgress(startedAt, message),
+  );
   try {
     return args.agentTask == null
         ? await runDirect(ctx, args)
@@ -65,6 +70,15 @@ Future<int> run(ArgResults results, ArgParser parser) async {
   } finally {
     ctx.dispose();
   }
+}
+
+/// Progress lines go to stderr (stdout stays pure result JSON) with an
+/// elapsed `mm:ss` prefix since run start.
+void printProgress(DateTime startedAt, String message) {
+  final elapsed = DateTime.now().difference(startedAt);
+  final mm = elapsed.inMinutes.toString().padLeft(2, '0');
+  final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+  stderr.writeln('[$mm:$ss] $message');
 }
 
 /// 缺必填参数返回 null（用法错误已由 stderr 说明）。
