@@ -58,7 +58,10 @@ class PipelineConfig {
   }) async {
     final config = file ?? File('pipeline_config.json');
     if (!await config.exists()) {
-      throw ConfigException('config file not found: ${config.path}');
+      throw ConfigException(
+        'config file not found: ${config.path}'
+        '（可复制 pipeline_config.example.json 后填写）',
+      );
     }
     final Object? decoded;
     try {
