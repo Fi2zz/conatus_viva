@@ -40,9 +40,8 @@ abstract class ImageUrlProvider {
 /// the returned URL is rejected by 万相 or needs a longer lifetime
 /// (Review Focus #1).
 class DashScopeUploadProvider implements ImageUrlProvider {
-  DashScopeUploadProvider({required String apiKey, http.Client? client})
-    : _apiKey = apiKey,
-      _client = client ?? http.Client();
+  DashScopeUploadProvider({required this._apiKey, http.Client? client})
+    : _client = client ?? http.Client();
 
   /// Documented file upload endpoint (`POST`, multipart field `file`).
   static final Uri uploadUri = Uri.parse(
