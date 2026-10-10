@@ -73,26 +73,26 @@ void main() {
     headers: <String, String>{'content-type': 'application/json'},
   );
 
-  PipelineConfig makeConfig({String? voiceId, String fallback = 'longxia'})
-    => PipelineConfig(
-      llmModel: 'qwen3.8-flash',
-      ttsModel: 'qwen-audio-3.1-tts-flash',
-      ttsFallbackModel: 'qwen3-tts-flash',
-      ttsVoiceId: voiceId,
-      ttsFallbackVoice: fallback,
-      i2vModel: 'wan2.6-i2v-flash',
-      i2vResolution: '720P',
-      i2vWatermark: true,
-      i2vSeed: 42,
-      i2vPollSeconds: 15,
-      i2vMaxWaitMinutes: 10,
-      ossBucket: '',
-      ossEndpoint: '',
-      ossPrefix: 'pipeline-exp/',
-      targetCount: 4,
-      minClipS: 2,
-      maxClipS: 15,
-    );
+  PipelineConfig makeConfig({String? voiceId, String fallback = 'longxia'}) =>
+      PipelineConfig(
+        llmModel: 'qwen3.8-flash',
+        ttsModel: 'qwen-audio-3.1-tts-flash',
+        ttsFallbackModel: 'qwen3-tts-flash',
+        ttsVoiceId: voiceId,
+        ttsFallbackVoice: fallback,
+        i2vModel: 'wan2.6-i2v-flash',
+        i2vResolution: '720P',
+        i2vWatermark: true,
+        i2vSeed: 42,
+        i2vPollSeconds: 15,
+        i2vMaxWaitMinutes: 10,
+        ossBucket: '',
+        ossEndpoint: '',
+        ossPrefix: 'pipeline-exp/',
+        targetCount: 4,
+        minClipS: 2,
+        maxClipS: 15,
+      );
 
   VideoScript scriptOf(List<String> lines) => VideoScript(
     segments: <SegmentScript>[
@@ -142,16 +142,16 @@ void main() {
 
         expect(bodies, hasLength(2));
         // qwen-audio family → SpeechSynthesizer, instruction INSIDE input.
-        expect(bodies[0]['input'], isA<Map>().having(
-          (input) => input['instruction'],
-          'instruction',
-          '请用河南话表达。',
-        ));
-        expect(bodies[0].containsKey('instruction'), isFalse);
         expect(
-          urls[0],
-          '${TtsClient.defaultHost}${TtsClient.speechPath}',
+          bodies[0]['input'],
+          isA<Map>().having(
+            (input) => input['instruction'],
+            'instruction',
+            '请用河南话表达。',
+          ),
         );
+        expect(bodies[0].containsKey('instruction'), isFalse);
+        expect(urls[0], '${TtsClient.defaultHost}${TtsClient.speechPath}');
         // Qwen-TTS family → multimodal-generation, no instruction channel,
         // no control-tag prefix, language pinned.
         expect(instructionOf(bodies[1]), isNull);
@@ -164,10 +164,7 @@ void main() {
           (bodies[1]['input'] as Map<String, dynamic>)['text'],
           isNot(startsWith('[very slowly]')),
         );
-        expect(
-          urls[1],
-          '${TtsClient.defaultHost}${TtsClient.generationPath}',
-        );
+        expect(urls[1], '${TtsClient.defaultHost}${TtsClient.generationPath}');
       },
     );
 
@@ -337,10 +334,7 @@ void main() {
 
       // The dialect attempt got exactly one transient retry, then the step
       // re-synthesized the segment with the mandarin instruction.
-      expect(
-        instructions.where((i) => i == '请用河南话表达。'),
-        hasLength(2),
-      );
+      expect(instructions.where((i) => i == '请用河南话表达。'), hasLength(2));
       expect(instructions.where((i) => i == '请用普通话表达。'), hasLength(1));
       // The mandarin track is what landed on disk.
       expect(audios, hasLength(1));
@@ -392,8 +386,8 @@ void main() {
       expect(audios[1].seconds, closeTo(1.0, 0.05));
       expect(work.file('04_audio/seg_1.wav').readAsBytesSync(), wavBytes);
       // Atomic publishes leave no temp files behind.
-      expect(work.exists('04_audio/durations.json.tmp'), isFalse);
-      expect(work.exists('04_audio/seg_0.wav.tmp'), isFalse);
+      expect(work.exists('04_audio/durations.tmp.json'), isFalse);
+      expect(work.exists('04_audio/seg_0.tmp.wav'), isFalse);
 
       final record = state.step('tts');
       expect(record.status, StepStatus.succeeded);

@@ -55,7 +55,8 @@ class TtsClient {
   static const String defaultHost = 'https://dashscope.aliyuncs.com';
 
   /// SpeechSynthesizer path (qwen-audio-* / CosyVoice family).
-  static const String speechPath = '/api/v1/services/audio/tts/SpeechSynthesizer';
+  static const String speechPath =
+      '/api/v1/services/audio/tts/SpeechSynthesizer';
 
   /// Multimodal-generation path (Qwen-TTS family, e.g. qwen3-tts-flash).
   static const String generationPath =
@@ -139,7 +140,12 @@ class TtsClient {
           'content-type': 'application/json',
         },
         body: jsonEncode(
-          _bodyFor(model: model, text: text, voice: voice, instruction: instruction),
+          _bodyFor(
+            model: model,
+            text: text,
+            voice: voice,
+            instruction: instruction,
+          ),
         ),
       );
     } on http.ClientException catch (e) {
@@ -299,7 +305,7 @@ class TtsClient {
     final File wav;
     try {
       dir = Directory.systemTemp.createTempSync('conatus_tts_');
-      final part = File('${dir.path}/audio.wav.tmp');
+      final part = File('${dir.path}/audio.tmp.wav');
       part.writeAsBytesSync(bytes, flush: true);
       wav = part.renameSync('${dir.path}/audio.wav');
     } on FileSystemException catch (e) {
