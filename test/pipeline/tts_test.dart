@@ -102,14 +102,18 @@ void main() {
     totalChars: lines.fold<int>(0, (sum, line) => sum + line.length),
   );
 
-  /// The instruction carried by a captured TTS request body — `instruction`
-  /// for qwen-audio-* models, `instructions` for the qwen3-* family.
-  String instructionOf(Map<String, dynamic> body) =>
-      (body['instruction'] ?? body['instructions']) as String;
+  /// The instruction carried by a captured TTS request body — only the
+  /// qwen-audio-* family carries one (inside `input`); Qwen-TTS bodies
+  /// have no instruction channel, so this returns null for them.
+  String? instructionOf(Map<String, dynamic> body) {
+    final input = body['input'];
+    if (input is Map<String, dynamic>) return input['instruction'] as String?;
+    return null;
+  }
 
   group('TtsClient', () {
     test(
-      'qwen-audio model sends instruction param, qwen3 sends instructions',
+      'qwen-audio hits SpeechSynthesizer with in-input instruction, qwen3 hits multimodal-generation without one',
       () async {
         final bodies = <Map<String, dynamic>>[];
         final urls = <String>[];
@@ -137,16 +141,64 @@ void main() {
         );
 
         expect(bodies, hasLength(2));
-        // qwen-audio family → `instruction`, never `instructions`.
-        expect(bodies[0]['instruction'], '请用河南话表达。');
-        expect(bodies[0].containsKey('instructions'), isFalse);
-        // qwen3 family → `instructions`, never `instruction`.
-        expect(bodies[1]['instructions'], '请用普通话表达。');
-        expect(bodies[1].containsKey('instruction'), isFalse);
-        // Both went to the pinned SpeechSynthesizer endpoint.
-        expect(urls, everyElement(TtsClient.endpoint));
+        // qwen-audio family → SpeechSynthesizer, instruction INSIDE input.
+        expect(bodies[0]['input'], isA<Map>().having(
+          (input) => input['instruction'],
+          'instruction',
+          '请用河南话表达。',
+        ));
+        expect(bodies[0].containsKey('instruction'), isFalse);
+        expect(
+          urls[0],
+          '${TtsClient.defaultHost}${TtsClient.speechPath}',
+        );
+        // Qwen-TTS family → multimodal-generation, no instruction channel,
+        // no control-tag prefix, language pinned.
+        expect(instructionOf(bodies[1]), isNull);
+        expect(bodies[1].containsKey('instructions'), isFalse);
+        expect(
+          (bodies[1]['input'] as Map<String, dynamic>)['language_type'],
+          'Chinese',
+        );
+        expect(
+          (bodies[1]['input'] as Map<String, dynamic>)['text'],
+          isNot(startsWith('[very slowly]')),
+        );
+        expect(
+          urls[1],
+          '${TtsClient.defaultHost}${TtsClient.generationPath}',
+        );
       },
     );
+
+    test('workspace host applies to both endpoint families', () async {
+      final urls = <String>[];
+      final client = TtsClient(
+        apiKey: 'test-key',
+        host: 'https://ws-123.cn-beijing.maas.aliyuncs.com',
+        client: MockClient((request) async {
+          urls.add(request.url.toString());
+          return wavResponse();
+        }),
+      );
+
+      await client.synth(
+        text: '你好',
+        model: 'qwen-audio-3.1-tts-flash',
+        fallbackVoice: 'v1',
+        instruction: 'x',
+      );
+      await client.synth(
+        text: '你好',
+        model: 'qwen3-tts-flash',
+        fallbackVoice: 'v1',
+        instruction: 'x',
+      );
+
+      const host = 'https://ws-123.cn-beijing.maas.aliyuncs.com';
+      expect(urls[0], '$host${TtsClient.speechPath}');
+      expect(urls[1], '$host${TtsClient.generationPath}');
+    });
 
     test('text prefixed with [very slowly] and wav 24000 requested', () async {
       http.Request? captured;
@@ -255,7 +307,7 @@ void main() {
         apiKey: 'test-key',
         client: MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final instruction = instructionOf(body);
+          final instruction = instructionOf(body) ?? '<none>';
           instructions.add(instruction);
           if (instruction == '请用河南话表达。') {
             return http.Response(
@@ -275,7 +327,9 @@ void main() {
       final audios = await runTtsStep(
         script: scriptOf(<String>['今天天气很好']),
         dialect: kDialectTable['河南']!,
-        cfg: makeConfig(),
+        // voice_id set → qwen-audio path, which is the family that carries
+        // the dialect instruction the mock keys on.
+        cfg: makeConfig(voiceId: 'cloned_v1'),
         tts: tts,
         work: work,
         state: state,
@@ -448,7 +502,10 @@ void main() {
       final body = jsonDecode(captured!.body) as Map<String, dynamic>;
       expect(body['model'], 'qwen-audio-3.1-tts-flash');
       expect((body['input'] as Map<String, dynamic>)['voice'], 'cloned_v1');
-      expect(body['instruction'], '请用河南话表达。');
+      expect(
+        (body['input'] as Map<String, dynamic>)['instruction'],
+        '请用河南话表达。',
+      );
     });
   });
 }

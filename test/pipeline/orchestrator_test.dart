@@ -121,8 +121,10 @@ class MockBailian {
   http.Response _tts(http.Request req) {
     ttsCalls++;
     final body = jsonDecode(req.body) as Map<String, dynamic>;
-    final instruction = body['instruction'] ?? body['instructions'];
-    ttsInstructions.add(instruction as String);
+    final input = body['input'] as Map<String, dynamic>;
+    // The orchestrator tests run the qwen-audio path (voiceId set below),
+    // which carries the dialect instruction inside `input`.
+    ttsInstructions.add(input['instruction'] as String);
     return http.Response.bytes(
       List<int>.of(wavBytes),
       200,
@@ -142,7 +144,7 @@ PipelineConfig makeConfig() => PipelineConfig(
   llmModel: 'qwen3.8-flash',
   ttsModel: 'qwen-audio-3.1-tts-flash',
   ttsFallbackModel: 'qwen3-tts-flash',
-  ttsVoiceId: null,
+  ttsVoiceId: 'voice_test',
   ttsFallbackVoice: 'longxia',
   i2vModel: 'wan2.6-i2v-flash',
   i2vResolution: '720P',

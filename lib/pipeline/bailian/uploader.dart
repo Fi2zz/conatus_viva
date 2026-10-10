@@ -40,15 +40,19 @@ abstract class ImageUrlProvider {
 /// the returned URL is rejected by 万相 or needs a longer lifetime
 /// (Review Focus #1).
 class DashScopeUploadProvider implements ImageUrlProvider {
-  DashScopeUploadProvider({required this._apiKey, http.Client? client})
-    : _client = client ?? http.Client();
+  DashScopeUploadProvider({
+    required this._apiKey,
+    http.Client? client,
+    String? host,
+  }) : _host = host ?? PipelineConfig.defaultApiHost,
+       _client = client ?? http.Client();
 
-  /// Documented file upload endpoint (`POST`, multipart field `file`).
-  static final Uri uploadUri = Uri.parse(
-    'https://dashscope.aliyuncs.com/api/v1/uploads',
-  );
+  /// Documented file upload path (`POST`, multipart field `file`) — the
+  /// host follows PipelineConfig.apiHost (workspace-aware).
+  Uri get _uploadUri => Uri.parse('$_host/api/v1/uploads');
 
   final String _apiKey;
+  final String _host;
   final http.Client _client;
 
   @override
@@ -67,7 +71,7 @@ class DashScopeUploadProvider implements ImageUrlProvider {
   Future<ImageUrl> publish(File photo) async {
     final bytes = _readPhoto(photo);
 
-    final request = http.MultipartRequest('POST', uploadUri)
+    final request = http.MultipartRequest('POST', _uploadUri)
       ..headers['Authorization'] = 'Bearer $_apiKey'
       ..files.add(
         http.MultipartFile.fromBytes(
@@ -260,6 +264,7 @@ ImageUrlProvider pickProvider({
       return DashScopeUploadProvider(
         apiKey: cfg.requireApiKey(),
         client: client,
+        host: cfg.apiHost,
       );
     default:
       throw ArgumentError.value(

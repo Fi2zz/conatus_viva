@@ -47,23 +47,27 @@ class I2vClient {
   I2vClient({
     required this._apiKey,
     http.Client? client,
+    String? host,
     this._model = 'wan2.6-i2v-flash',
     this._resolution = '720P',
     this._watermark = true,
     this._seed = 42,
-  }) : _client = client ?? http.Client();
+  }) : _host = host ?? defaultHost,
+       _client = client ?? http.Client();
 
-  /// Async video-generation endpoint (brief-pinned URL).
-  static final Uri submitUri = Uri.parse(
-    'https://dashscope.aliyuncs.com/api/v1/services/aigc/'
-    'video-generation/video-synthesis',
+  /// Default workspace-less DashScope host.
+  static const String defaultHost = 'https://dashscope.aliyuncs.com';
+
+  /// Async video-generation endpoint (submit).
+  Uri get _submitUri => Uri.parse(
+    '$_host/api/v1/services/aigc/video-generation/video-synthesis',
   );
 
-  /// Async task polling endpoint (brief-pinned URL shape).
-  static Uri taskUri(String taskId) =>
-      Uri.parse('https://dashscope.aliyuncs.com/api/v1/tasks/$taskId');
+  /// Async task polling endpoint.
+  Uri _taskUri(String taskId) => Uri.parse('$_host/api/v1/tasks/$taskId');
 
   final String _apiKey;
+  final String _host;
   final http.Client _client;
   final String _model;
   final String _resolution;
@@ -86,7 +90,7 @@ class I2vClient {
   }) async {
     final response = await _send(
       () => _client.post(
-        submitUri,
+        _submitUri,
         headers: <String, String>{..._headers, 'X-DashScope-Async': 'enable'},
         body: jsonEncode(<String, dynamic>{
           'model': _model,
@@ -109,7 +113,7 @@ class I2vClient {
 
   /// One poll of [taskId]; the caller owns the interval and the deadline.
   Future<I2vTask> poll(String taskId) async {
-    final response = await _send(() => _client.get(taskUri(taskId), headers: _headers));
+    final response = await _send(() => _client.get(_taskUri(taskId), headers: _headers));
     if (response.statusCode != 200) throw _statusError('i2v poll', response);
     return _parseTask(_bodyOf(response), taskId);
   }

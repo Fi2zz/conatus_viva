@@ -20,13 +20,21 @@ class TtsAudio {
   final double seconds;
 }
 
-/// DashScope SpeechSynthesizer client for the 04 tts step (spec §4「04 tts」).
+/// DashScope TTS client for the 04 tts step (spec §4「04 tts」).
 ///
-/// Request body (brief contract + Global Constraints): `model`, an `input`
-/// object `{text, voice, format: 'wav', sample_rate: 24000}` where `text`
-/// carries the `[very slowly]` control prefix (spec §4-04), plus the
-/// instruction parameter — **the param name follows the model family**:
-/// `instruction` for `qwen-audio-*`, `instructions` otherwise.
+/// Endpoints follow the model family (官方文档口径，M0 实测修正):
+/// - `qwen-audio-*` → `POST {host}/api/v1/services/audio/tts/SpeechSynthesizer`,
+///   body `input: {text, voice, format: 'wav', sample_rate: 24000,
+///   instruction}` — `instruction` lives INSIDE `input` and the `[very
+///   slowly]` control prefix is only supported by this family.
+/// - `qwen3-*` → `POST {host}/api/v1/services/aigc/multimodal-generation/
+///   generation`, body `input: {text, voice, language_type: 'Chinese'}` —
+///   no instruction channel and no control tags; dialect comes from the
+///   chosen voice.
+///
+/// The host is PipelineConfig.apiHost: the default DashScope host, or the
+/// workspace-scoped `https://<id>.cn-beijing.maas.aliyuncs.com` when a
+/// workspace is configured.
 ///
 /// Reply handling: the non-streaming API answers with a JSON envelope whose
 /// `output.audio.url` is an audio file valid for 24h (spec §3). The URL is
@@ -36,16 +44,22 @@ class TtsAudio {
 /// Error mapping (spec §6 错误分类与重试, mirrors the QwenClient patterns):
 /// - 408 / 429 / 5xx / network failure / an unusable reply → transient,
 ///   retried once with 1s backoff inside [synth];
-/// - 401 / 400 and any other non-2xx status → fatal, fail fast without
+/// - 401 / 400 / 403 and any other non-2xx status → fatal, fail fast without
 ///   consuming retries.
 class TtsClient {
-  TtsClient({required this._apiKey, http.Client? client})
-    : _client = client ?? http.Client();
+  TtsClient({required this._apiKey, http.Client? client, String? host})
+    : _host = host ?? defaultHost,
+      _client = client ?? http.Client();
 
-  /// Native speech-synthesis endpoint — the https counterpart of the
-  /// `wss://` realtime API (pinned by the brief for every TTS model).
-  static const String endpoint =
-      'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer';
+  /// Default workspace-less DashScope host.
+  static const String defaultHost = 'https://dashscope.aliyuncs.com';
+
+  /// SpeechSynthesizer path (qwen-audio-* / CosyVoice family).
+  static const String speechPath = '/api/v1/services/audio/tts/SpeechSynthesizer';
+
+  /// Multimodal-generation path (Qwen-TTS family, e.g. qwen3-tts-flash).
+  static const String generationPath =
+      '/api/v1/services/aigc/multimodal-generation/generation';
 
   /// Control tag prefix slowing narration down (spec §4-04). Tags enter the
   /// TTS text only, never the subtitles (spec §4-06).
@@ -55,6 +69,7 @@ class TtsClient {
   static const Duration _retryDelay = Duration(seconds: 1);
 
   final String _apiKey;
+  final String _host;
   final http.Client _client;
 
   /// Waits between retries. Tests replace this with a no-op so the suite
@@ -118,25 +133,14 @@ class TtsClient {
     final http.Response response;
     try {
       response = await _client.post(
-        Uri.parse(endpoint),
+        _endpointFor(model),
         headers: <String, String>{
           'Authorization': 'Bearer $_apiKey',
           'content-type': 'application/json',
         },
-        body: jsonEncode(<String, dynamic>{
-          'model': model,
-          'input': <String, dynamic>{
-            'text': '$slowPrefix$text',
-            'voice': voice,
-            'format': 'wav',
-            'sample_rate': 24000,
-          },
-          // Global Constraints: param name follows the model family.
-          if (model.startsWith('qwen-audio'))
-            'instruction': instruction
-          else
-            'instructions': instruction,
-        }),
+        body: jsonEncode(
+          _bodyFor(model: model, text: text, voice: voice, instruction: instruction),
+        ),
       );
     } on http.ClientException catch (e) {
       throw PipelineError(ErrorClass.transient, 'TTS network error: $e');
@@ -152,6 +156,44 @@ class TtsClient {
       throw PipelineError(ErrorClass.transient, 'TTS reply carried no audio');
     }
     return audio;
+  }
+
+  /// Endpoint path follows the model family (class doc): SpeechSynthesizer
+  /// for qwen-audio-*, multimodal-generation for Qwen-TTS.
+  Uri _endpointFor(String model) {
+    final path = model.startsWith('qwen-audio') ? speechPath : generationPath;
+    return Uri.parse('$_host$path');
+  }
+
+  /// Request body per model family: qwen-audio carries the `[very slowly]`
+  /// control prefix and an in-input `instruction`; Qwen-TTS supports
+  /// neither, so its text stays clean and `language_type` is pinned.
+  Map<String, dynamic> _bodyFor({
+    required String model,
+    required String text,
+    required String? voice,
+    required String instruction,
+  }) {
+    if (model.startsWith('qwen-audio')) {
+      return <String, dynamic>{
+        'model': model,
+        'input': <String, dynamic>{
+          'text': '$slowPrefix$text',
+          'voice': voice,
+          'format': 'wav',
+          'sample_rate': 24000,
+          'instruction': instruction,
+        },
+      };
+    }
+    return <String, dynamic>{
+      'model': model,
+      'input': <String, dynamic>{
+        'text': text,
+        'voice': voice,
+        'language_type': 'Chinese',
+      },
+    };
   }
 
   /// Resolves a 200 reply to audio bytes: a JSON envelope hands back a 24h
