@@ -135,7 +135,7 @@ class VivaPipeline {
     ImageUrlProvider? urls,
     http.Client? http,
     this.baseDir = 'pipeline_out',
-    this.preferProvider = 'dashscope',
+    this.preferProvider = 'base64',
     this.onProgress,
   }) {
     _llm = llm;
@@ -150,9 +150,9 @@ class VivaPipeline {
   /// Artifact root; runs land in `$baseDir/<contentId>/`.
   final String baseDir;
 
-  /// Default [ImageUrlProvider] preference (`'dashscope'` | `'oss'`), used
-  /// only when no explicit `urls` provider was injected (CLI
-  /// `--prefer-provider`).
+  /// Default [ImageUrlProvider] preference (`'base64'` | `'dashscope'` |
+  /// `'oss'`), used only when no explicit `urls` provider was injected
+  /// (CLI `--prefer-provider`).
   final String preferProvider;
 
   /// Human-readable progress sink (step transitions + render segment

@@ -91,7 +91,7 @@ String _extension(String path) {
 /// ([attachAgentLoop]) because it needs the API key.
 Future<Context> createHost({
   required PipelineConfig cfg,
-  String preferProvider = 'dashscope',
+  String preferProvider = 'base64',
   void Function(String message)? onProgress,
 }) async {
   final ctx = Context.root(name: 'conatus-host');

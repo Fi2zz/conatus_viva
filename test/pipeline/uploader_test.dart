@@ -149,6 +149,16 @@ void main() {
   group('pickProvider', () {
     final client = MockClient((_) async => http.Response('', 200));
 
+    test('base64 provider is the zero-network default', () {
+      final provider = pickProvider(
+        prefer: 'base64',
+        cfg: makeConfig(),
+        client: client,
+      );
+      expect(provider, isA<Base64ImageUrlProvider>());
+      expect(provider.name, 'base64');
+    });
+
     test('provider selection switches on prefer flag', () {
       final oss = pickProvider(
         prefer: 'oss',
@@ -191,6 +201,40 @@ void main() {
       expect(
         () => pickProvider(prefer: 'oss', cfg: makeConfig(), client: client),
         throwsA(isA<ConfigException>()),
+      );
+    });
+  });
+
+  group('Base64ImageUrlProvider', () {
+    test('publishes a data URL with mime from extension, no http', () async {
+      final provider = Base64ImageUrlProvider();
+
+      final published = await provider.publish(photo);
+
+      expect(
+        published.url,
+        'data:image/jpeg;base64,${base64Encode(photo.readAsBytesSync())}',
+      );
+      expect(published.expiresAt.isAfter(DateTime.now()), isTrue);
+    });
+
+    test('png/webp/bmp extensions map to their mime types', () async {
+      final provider = Base64ImageUrlProvider();
+      for (final ext in <String>['png', 'webp', 'bmp']) {
+        final f = File('${tmp.path}/x.$ext')
+          ..writeAsBytesSync(<int>[0x01]);
+        final published = await provider.publish(f);
+        expect(published.url, startsWith('data:image/$ext;base64,'));
+      }
+    });
+
+    test('unreadable photo is fatal', () async {
+      final provider = Base64ImageUrlProvider();
+      await expectLater(
+        provider.publish(File('${tmp.path}/missing.jpg')),
+        throwsA(
+          isA<PipelineError>().having((e) => e.cls, 'cls', ErrorClass.fatal),
+        ),
       );
     });
   });

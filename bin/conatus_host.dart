@@ -41,9 +41,9 @@ ArgParser buildParser() {
     ..addOption('agent', help: '自然语言任务，交给 agent loop 执行')
     ..addOption(
       'prefer-provider',
-      defaultsTo: 'dashscope',
-      allowed: <String>['dashscope', 'oss'],
-      help: '图片 URL 提供方（oss 走签名上传回退）',
+      defaultsTo: 'base64',
+      allowed: <String>['base64', 'dashscope', 'oss'],
+      help: '图片 URL 提供方（base64 直传免上传；oss 走签名上传回退）',
     )
     ..addFlag('help', abbr: 'h', negatable: false, help: '打印用法');
 }

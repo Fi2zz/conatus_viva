@@ -132,6 +132,44 @@ class DashScopeUploadProvider implements ImageUrlProvider {
   }
 }
 
+/// Zero-network publisher: encodes the photo as a `data:{MIME};base64,…`
+/// data URL, which 万相 `img_url` accepts natively (官方文档方式三).
+/// Sidesteps the upload endpoint entirely — no 405/403, no 24h expiry,
+/// no OSS. This is the default provider (M0 实测: /api/v1/uploads 在
+/// workspace 主机上 405).
+class Base64ImageUrlProvider implements ImageUrlProvider {
+  const Base64ImageUrlProvider();
+
+  @override
+  String get name => 'base64';
+
+  @override
+  Future<ImageUrl> publish(File photo) async {
+    final bytes = _readPhoto(photo);
+    final mime = _resolveMime(photo.path);
+    return ImageUrl(
+      url: 'data:$mime;base64,${base64Encode(bytes)}',
+      expiresAt: DateTime.now().add(const Duration(days: 365)),
+    );
+  }
+
+  /// MIME follows the file extension (万相 supports jpeg/png/bmp/webp).
+  static String _resolveMime(String path) {
+    final dot = path.lastIndexOf('.');
+    final ext = dot < 0 ? '' : path.substring(dot + 1).toLowerCase();
+    switch (ext) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'bmp':
+        return 'image/bmp';
+      default:
+        return 'image/jpeg';
+    }
+  }
+}
+
 /// Fallback publisher (spec §5 实现 2): signs a PUT into the experiment
 /// bucket with the OSS V1 header signature via `package:http` + HMAC-SHA1 —
 /// no OSS SDK. Credentials come only from `OSS_ACCESS_KEY_ID` /
@@ -226,18 +264,21 @@ class OssSignedUrlProvider implements ImageUrlProvider {
   }
 }
 
-/// The Review Focus #1 switch: `'dashscope'` (default path) uploads through
-/// the DashScope file API, `'oss'` falls back to a signed PUT into the
-/// experiment bucket (matching the CLI's `--prefer-provider dashscope|oss`).
-/// An unknown value throws [ArgumentError] so a typo cannot silently pick
-/// the wrong path; missing credentials throw [ConfigException] (fail fast,
-/// same taxonomy as [PipelineConfig.requireApiKey]).
+/// The Review Focus #1 switch: `'base64'` (default — data URL, zero
+/// network), `'dashscope'` uploads through the DashScope file API, `'oss'`
+/// falls back to a signed PUT into the experiment bucket (matching the
+/// CLI's `--prefer-provider base64|dashscope|oss`). An unknown value throws
+/// [ArgumentError] so a typo cannot silently pick the wrong path; missing
+/// credentials throw [ConfigException] (fail fast, same taxonomy as
+/// [PipelineConfig.requireApiKey]).
 ImageUrlProvider pickProvider({
   required String prefer,
   required PipelineConfig cfg,
   required http.Client client,
 }) {
   switch (prefer) {
+    case 'base64':
+      return const Base64ImageUrlProvider();
     case 'oss':
       final accessKeyId = cfg.ossAccessKeyId;
       final accessKeySecret = cfg.ossAccessKeySecret;
@@ -270,7 +311,7 @@ ImageUrlProvider pickProvider({
       throw ArgumentError.value(
         prefer,
         'prefer',
-        "must be 'dashscope' or 'oss'",
+        "must be 'base64', 'dashscope' or 'oss'",
       );
   }
 }
