@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_wanxiang/pipeline/config.dart';
+import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
+import 'package:flutter_wanxiang/pipeline/ffmpeg.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
 import 'package:flutter_wanxiang/server/pipeline_server.dart';
 import 'package:test/test.dart';
@@ -54,6 +56,27 @@ Future<({int status, String body})> _postJson(
   } finally {
     client.close(force: true);
   }
+}
+
+Future<String> _createId(PipelineServer server, String theme) async {
+  final created = await _postJson(server.boundPort!, '/api/t2v', {
+    'duration': 5,
+    'dialect': '河南',
+    'theme': theme,
+  });
+  expect(created.status, 202);
+  return (jsonDecode(created.body) as Map<String, dynamic>)['id'] as String;
+}
+
+Future<Map<String, dynamic>> _poll(PipelineServer server, String id) async {
+  var body = <String, dynamic>{};
+  for (var i = 0; i < 50; i++) {
+    final poll = await _get(server.boundPort!, '/api/t2v/$id');
+    body = jsonDecode(poll.body) as Map<String, dynamic>;
+    if (body['status'] != 'running') break;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  return body;
 }
 
 void main() {
@@ -195,5 +218,84 @@ void main() {
     expect(t2v['yuan_per_second'], 0.15);
     expect(t2v['duration_min'], 2);
     expect(t2v['duration_max'], 30);
+  });
+
+  test('dialect codes resolve to their own instruction (no mandarin fallback)',
+      () async {
+    final res = await _get(server.boundPort!, '/api/dialects');
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final dialects = (data['dialects'] as List).cast<Map<String, dynamic>>();
+    for (final d in dialects) {
+      final code = d['code'] as String;
+      expect(
+        resolveDialect(code).instruction,
+        d['instruction'],
+        reason: 'code=$code must resolve to its own dialect',
+      );
+    }
+    final henan = dialects.firstWhere(
+      (d) => (d['instruction'] as String).contains('河南'),
+    );
+    expect(henan['code'], '河南');
+    expect(henan['name'], '河南话');
+  });
+
+  test('duration 0 / negative / non-number are rejected', () async {
+    for (final bad in <Object>[0, -1, 'abc']) {
+      final res = await _postJson(server.boundPort!, '/api/t2v', {
+        'duration': bad,
+        'dialect': '河南',
+        'theme': 'x',
+      });
+      expect(res.status, 400, reason: 'duration=$bad must be rejected');
+    }
+  });
+
+  test('missing API key yields a failed run with a Chinese message', () async {
+    final s = PipelineServer(
+      cfg: _cfg,
+      staticDir: staticDir,
+      port: 0,
+      avatarImage: File('${outDir.path}/avatar.jpg'),
+    );
+    await s.start();
+    try {
+      final id = await _createId(s, '河南美食');
+      final body = await _poll(s, id);
+      expect(body['status'], 'failed');
+      expect(body['error'], contains('请设置环境变量'));
+      expect(body.containsKey('video_path'), isFalse);
+    } finally {
+      await s.stop();
+    }
+  });
+
+  test('an overlay failure fails the run with the ffmpeg error', () async {
+    final s = PipelineServer(
+      cfg: _cfg,
+      staticDir: staticDir,
+      port: 0,
+      avatarImage: File('${outDir.path}/avatar.jpg'),
+      speakerRunner:
+          ({
+            required String theme,
+            required String dialect,
+            required int durationS,
+            required String contentId,
+            required void Function(String) onProgress,
+          }) async {
+            throw const FfmpegException(exitCode: 1, stderr: 'overlay boom');
+          },
+    );
+    await s.start();
+    try {
+      final id = await _createId(s, '河南美食');
+      final body = await _poll(s, id);
+      expect(body['status'], 'failed');
+      expect(body['error'], contains('overlay boom'));
+      expect(body.containsKey('video_path'), isFalse);
+    } finally {
+      await s.stop();
+    }
   });
 }

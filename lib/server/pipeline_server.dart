@@ -9,14 +9,53 @@ import 'package:flutter_wanxiang/pipeline/errors.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
 import 'package:flutter_wanxiang/server/api_router.dart';
 
-/// Unique dialect specs from [kDialectTable], deduplicated by label.
-List<DialectSpec> get _uniqueDialects {
+/// One dialect dropdown option.
+///
+/// [code] is the Chinese region key the UI sends back and `t2vPrompt` /
+/// `resolveDialect` consume (e.g. `河南`); [label] is the pinyin tag
+/// (e.g. `henan`); [name] is the display name (e.g. `河南话`).
+class DialectOption {
+  const DialectOption({
+    required this.code,
+    required this.label,
+    required this.name,
+    required this.instruction,
+  });
+
+  final String code;
+  final String label;
+  final String name;
+  final String instruction;
+}
+
+/// Unique dialect options from [kDialectTable], deduplicated by label.
+///
+/// The first region key for each spec is used as the code (e.g. `广东` for
+/// cantonese), so the value the UI sends back resolves back to the same spec.
+List<DialectOption> get _dialectOptions {
   final seen = <String>{};
-  final result = <DialectSpec>[];
-  for (final spec in kDialectTable.values) {
-    if (seen.add(spec.label)) result.add(spec);
+  final result = <DialectOption>[];
+  for (final entry in kDialectTable.entries) {
+    final spec = entry.value;
+    if (!seen.add(spec.label)) continue;
+    result.add(
+      DialectOption(
+        code: entry.key,
+        label: spec.label,
+        name: _dialectName(spec.instruction),
+        instruction: spec.instruction,
+      ),
+    );
   }
   return result;
+}
+
+/// `请用河南话表达。` → `河南话` (display name for the dropdown).
+String _dialectName(String instruction) {
+  var s = instruction;
+  if (s.startsWith('请用')) s = s.substring(2);
+  if (s.endsWith('表达。')) s = s.substring(0, s.length - 3);
+  return s;
 }
 
 /// Runs one text-to-video generation for [contentId]; the default builds a 万相
@@ -121,11 +160,12 @@ class PipelineServer {
   }
 
   Future<void> _getDialects(HttpRequest req) async {
-    final dialects = _uniqueDialects
+    final dialects = _dialectOptions
         .map(
           (d) => <String, String>{
-            'code': d.label,
+            'code': d.code,
             'label': d.label,
+            'name': d.name,
             'instruction': d.instruction,
           },
         )
@@ -215,8 +255,9 @@ class PipelineServer {
       record.logs.add('失败：${e.message}');
     } on ConfigException catch (e) {
       record.status = 'failed';
-      record.error = e.message;
-      record.logs.add('失败：${e.message}');
+      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+          '（${e.message}）';
+      record.logs.add('失败：${record.error}');
     } catch (e) {
       record.status = 'failed';
       record.error = '$e';

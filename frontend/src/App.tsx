@@ -4,6 +4,7 @@ import './App.css'
 interface Dialect {
   code: string
   label: string
+  name?: string
   instruction: string
 }
 
@@ -132,7 +133,7 @@ function App() {
           <select value={dialect} onChange={(e) => setDialect(e.target.value)}>
             {dialects.map((d) => (
               <option key={d.code} value={d.code}>
-                {d.label}
+                {d.name ?? d.label}
               </option>
             ))}
           </select>

@@ -14,12 +14,17 @@ import 'package:flutter_wanxiang/server/pipeline_server.dart';
 /// disk next to a sandboxed process.
 ///
 /// If [port] is already in use, the next 10 ports are tried automatically.
+///
+/// [env] is the environment the config reads secrets from; null → the process
+/// environment (packaged apps pass the merged `.env` + process map so a
+/// bundled `.env` can supply `DASHSCOPE_API_KEY`).
 Future<String> startPipelineServer({
   int port = 18080,
   String? staticDir,
   File? avatarImage,
+  Map<String, String>? env,
 }) async {
-  final cfg = await _loadConfig();
+  final cfg = await _loadConfig(env: env);
   final staticDirPath = Directory(staticDir ?? _resolveStaticDir());
 
   var actualPort = port;
@@ -47,13 +52,16 @@ Future<String> startPipelineServer({
   return 'http://localhost:$actualPort';
 }
 
-Future<PipelineConfig> _loadConfig() async {
+Future<PipelineConfig> _loadConfig({Map<String, String>? env}) async {
+  final resolvedEnv = env ?? Platform.environment;
   final configFile = File('pipeline_config.json');
   if (await configFile.exists()) {
-    return PipelineConfig.load(file: configFile);
+    return PipelineConfig.load(file: configFile, env: resolvedEnv);
   }
   // Fallback to defaults when no config file is present (development mode).
-  return const PipelineConfig(
+  // env is threaded through so the API key is still read from the process
+  // environment in a packaged build with no config file on disk.
+  return PipelineConfig(
     llmModel: 'qwen3.8-flash',
     ttsModel: 'qwen-audio-3.1-tts-flash',
     ttsFallbackModel: 'qwen3-tts-flash',
@@ -71,6 +79,7 @@ Future<PipelineConfig> _loadConfig() async {
     targetCount: 4,
     minClipS: 2,
     maxClipS: 15,
+    env: resolvedEnv,
   );
 }
 
