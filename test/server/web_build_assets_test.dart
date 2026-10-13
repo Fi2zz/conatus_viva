@@ -33,4 +33,22 @@ void main() {
     expect(names.any((p) => p.endsWith('.js')), isTrue);
     expect(names.any((p) => p.endsWith('.css')), isTrue);
   });
+
+  test('materializeAssetFile writes the avatar bytes', () async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    if (!manifest.listAssets().contains('assets/images/speaker_avatar.jpg')) {
+      markTestSkipped('avatar asset not bundled');
+      return;
+    }
+
+    final file = await materializeAssetFile(
+      rootBundle,
+      key: 'assets/images/speaker_avatar.jpg',
+      suffix: '.jpg',
+    );
+    addTearDown(() => file.deleteSync());
+
+    expect(file.existsSync(), isTrue);
+    expect(file.lengthSync(), greaterThan(0));
+  });
 }
