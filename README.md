@@ -1,8 +1,12 @@
-# conatus_viva — 月度相册视频流水线
+# conatus_viva — 月度相册视频流水线 & 方言配音主讲人
 
 输入一组照片（本地路径或 URL）和方言地区，端到端产出 15–20 秒的相册视频：多模态选片、口播文案、方言配音、万相图生视频、字幕合成。全程断点续跑、不重复扣费。
 
-核心是纯 Dart 管线（`lib/pipeline/`，不依赖 Flutter），宿主是 [conatus](https://github.com/Fi2zz/conatus) 的 `generate_monthly_video` 工具 + 实验 CLI（`bin/conatus_host.dart`）。
+核心是纯 Dart 管线（`lib/pipeline/`，不依赖 Flutter），三种使用形态：
+
+- **CLI**：`bin/conatus_host.dart`（实验入口，本文主要用法）
+- **conatus 工具**：[conatus](https://github.com/Fi2zz/conatus) 的 `generate_monthly_video`（高风险操作走审批）
+- **Flutter 桌面 app**：「方言配音主讲人」——内嵌 HTTP server + React 前端（WebView 壳），见下文专章
 
 ## 快速开始
 
@@ -58,6 +62,46 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 
 运行中进度打在 stderr（`[mm:ss]` 前缀），stdout 只输出结果 JSON。
 
+## 方言配音主讲人（Flutter 桌面 app）
+
+`lib/main.dart` 是桌面壳：启动内嵌 HTTP server，WebView 加载打包进来的 React 前端。填主题、选方言、定时长（2–30 秒），生成带卡通主讲人（左下角头像叠加）的方言口播视频，页内预览并下载 mp4。
+
+```bash
+# 密钥：app 从打包的 .env 读 DASHSCOPE_API_KEY（Finder 双击启动也有；
+# 进程环境变量优先于 .env）
+cp .env.example .env && $EDITOR .env
+
+flutter run -d macos   # 也有 windows/ 工程
+```
+
+产出落在 `~/conatus_viva/speaker/<content-id>/`（GUI 经 `open` 启动时 cwd 是 `/`，所以故意用绝对路径）：`raw.mp4`（万相原始输出）+ `video.mp4`（叠加主讲人后的成片）。
+
+### 前端开发回路
+
+`frontend/` 是 React 19 + Vite 8 + TypeScript（oxlint 做 lint）：
+
+```bash
+cd frontend
+npm run dev    # HMR 开发
+npm run build  # 输出到 ../web_build/（vite outDir），Flutter 打包的静态资源
+npm run lint   # oxlint
+```
+
+app 启动时 `lib/server/web_build_assets.dart` 把打包的 `web_build/` 物化到本地目录，由内嵌 server 托管给 WebView。
+
+### 内嵌 HTTP API
+
+`lib/server/`（`pipeline_server.dart` + `api_router.dart`）暴露：
+
+| 路由 | 用途 |
+|---|---|
+| `GET /api/dialects` | 方言下拉选项（来自 `kDialectTable` 去重） |
+| `POST /api/t2v` | 提交一次主讲人文生视频生成（主题 + 方言 + 时长） |
+| `GET /api/t2v/<id>` | 查询生成状态/结果元数据 |
+| `GET /api/t2v/<id>/video` | 下载成片 mp4 |
+
+路由分发是纯函数 `apiRouteFor(method, path)`（`api_router.dart`），不绑 socket 即可单测。
+
 ## 管线结构
 
 ```
@@ -70,8 +114,15 @@ lib/pipeline/
   bailian/           百炼客户端：llm（分类/文案）、tts（配音）、i2v（万相2.6）、wan30_video（万相3.0）、video_client（按模型名选 client）、uploader（图片供给）
   steps/             六步流水线：ingest → classify/select → script → tts → render → compose
   orchestrator.dart  编排器（步级幂等 + dry-run 停点 + --mute）
+  speaker_video.dart 主讲人文生视频（t2v + ffmpeg 头像叠加，桌面 app 用）
   monthly_video_tool.dart  conatus 工具封装（高风险，走审批）
+lib/server/
+  pipeline_server.dart 内嵌 HTTP server（方言选项 / t2v 生成 / 状态查询 / 视频下载）
+  api_router.dart     /api/* 纯函数路由分发
+  web_build_assets.dart  把打包的 web_build/ 物化到本地目录
+lib/speaker_tool/     主讲人工具的模型层（方言选项、表单、头像、.env 封装）
 bin/conatus_host.dart      实验 CLI
+frontend/             React 前端（方言配音主讲人 UI），构建产物在 web_build/
 ```
 
 人物照片硬规则走 Ken Burns（ffmpeg zoompan），不提交万相；风景照走 i2v，审核拒答自动降级 Ken Burns 且零计费。i2v 默认用 `wan2.6-i2v-flash`，可用 `--video-model` 切到万相 3.0（`wan3.0-video` / `wan3.0-video-prime`）——两个模型族各有独立 client，靠模型名分流，2.6 的请求结构不受影响。
@@ -90,7 +141,7 @@ OSS 回退（`--prefer-provider oss`）另需环境变量 `OSS_ACCESS_KEY_ID` / 
 ## 测试
 
 ```bash
-dart test test/pipeline/   # 全程离线（MockClient + 本机 ffmpeg fixture）
+dart test                # test/pipeline/ + test/server/，全程离线（MockClient + 本机 ffmpeg fixture）
 dart analyze lib bin test  # 零告警基线
 ```
 
@@ -98,5 +149,7 @@ dart analyze lib bin test  # 零告警基线
 
 - 设计 spec：`docs/superpowers/specs/2026-10-10-monthly-album-video-pipeline-design.md`
 - 实施计划：`docs/superpowers/plans/2026-10-10-conatus-viva-pipeline.md`
+- 主讲人工具 spec / 计划：`docs/superpowers/specs/2026-10-13-speaker-text-to-video-tool-design.md`、`docs/superpowers/plans/2026-10-13-speaker-text-to-video-tool.md`
 - M0 冒烟记录：`docs/superpowers/plans/m0-smoke-report.md`
 - 方言配音方案：`docs/万相图生视频方言配音方案_v1.0.md`
+- 视频局部修改可行性：`docs/视频局部修改可行性方案_v1.0.md`
