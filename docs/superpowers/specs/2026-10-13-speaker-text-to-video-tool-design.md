@@ -77,7 +77,7 @@ React 表单 ──POST /api/t2v──▶ Dart server(PipelineServer)
 
 ### 5.2 主讲人叠加（新增）
 - 素材：`assets/images/speaker_avatar.jpg`（卡通形象，浅底）。
-- 处理：缩放至视频高度约 **26%** → 圆角 + 细白边（圆角用 alpha mask 实现）→ 叠加到**左下角**，边距约画面宽/高的 **4%**。
+- 处理：缩放至视频高度约 **26%** → 圆角（细白边可后补；圆角用 alpha mask 实现）→ 叠加到**左下角**，边距约画面宽/高的 **4%**。
 - 音轨保持原样（`-c:a copy`），时长不变。
 - 纯参数构造函数置于 `lib/pipeline/ffmpeg.dart`（如 `overlayAvatarArgs`），单测断言参数；配一个本机 ffmpeg fixture 集成测试。
 - 素材路径：`main.dart` 像 `web_build/` 一样把打包资源物化到临时目录，将绝对路径传给 `startPipelineServer`。
