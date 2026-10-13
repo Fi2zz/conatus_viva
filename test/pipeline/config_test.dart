@@ -65,6 +65,20 @@ void main() {
     expect(c.t2vSeed, 7);
   });
 
+  test('t2v yuan_per_second parses, defaults to 0.15', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(tmp, '{"t2v": {"yuan_per_second": 0.2}}'),
+      env: {},
+    );
+    expect(c.t2vYuanPerSecond, 0.2);
+
+    final dflt = await PipelineConfig.load(
+      file: await writeConfig(tmp, '{}'),
+      env: {},
+    );
+    expect(dflt.t2vYuanPerSecond, 0.15);
+  });
+
   test('workspace_id routes every endpoint to the workspace maas host', () async {
     final c = await PipelineConfig.load(
       file: await writeConfig(tmp, '{"workspace_id": "ws-test123"}'),

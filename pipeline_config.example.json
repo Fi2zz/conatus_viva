@@ -26,7 +26,8 @@
     "watermark": false,
     "seed": null,
     "poll_seconds": 15,
-    "max_wait_minutes": 10
+    "max_wait_minutes": 10,
+    "yuan_per_second": 0.15
   },
   "oss": {
     "bucket": "",
