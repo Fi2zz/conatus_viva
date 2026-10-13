@@ -232,3 +232,45 @@ List<String> concatArgs({required List<File> parts, required File out}) {
     out.path,
   ];
 }
+
+/// Overlay the [avatar] image (a rounded card) into the bottom-left of
+/// [video] → [out].
+///
+/// The avatar is rounded via a `geq` alpha mask (corner radius = 10% of the
+/// source width, so it scales with the image) and sized to 26% of the video
+/// height (`scale2ref`), positioned with a 4% margin. The audio track is
+/// stream-copied, so the clip keeps its native narration; `0:a?` tolerates
+/// inputs without audio.
+List<String> overlayAvatarArgs({
+  required File video,
+  required File avatar,
+  required File out,
+}) {
+  const filter =
+      "[1:v]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':"
+      "a='if(lt(hypot(max(0,abs(X-W/2)-(W/2-W*0.1)),"
+      "max(0,abs(Y-H/2)-(H/2-W*0.1))),W*0.1),255,0)'[av];"
+      "[av][0:v]scale2ref=w='main_h*0.26':h='main_h*0.26'[av2][base];"
+      "[base][av2]overlay=x='main_w*0.04':y='main_h-overlay_h-main_h*0.04'[v]";
+  return [
+    '-y',
+    '-i',
+    video.path,
+    '-i',
+    avatar.path,
+    '-filter_complex',
+    filter,
+    '-map',
+    '[v]',
+    '-map',
+    '0:a?',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'copy',
+    '-shortest',
+    out.path,
+  ];
+}

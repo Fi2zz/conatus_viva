@@ -254,6 +254,25 @@ void main() {
       // concatArgs references exactly that file.
       expect(concatArgs(parts: [p1, p2], out: out), contains(list.path));
     });
+
+    test('overlayAvatarArgs rounds + scales the avatar and keeps audio', () {
+      final args = overlayAvatarArgs(
+        video: File('/tmp/v.mp4'),
+        avatar: File('/tmp/a.jpg'),
+        out: File('/tmp/o.mp4'),
+      );
+      final joined = args.join(' ');
+      expect(joined, contains('overlay'));
+      expect(joined, contains('scale2ref'));
+      expect(joined, contains('geq')); // 圆角 alpha
+      expect(args, containsAllInOrder(['-c:a', 'copy']));
+      expect(joined, contains('libx264'));
+      expect(joined, contains('yuv420p'));
+      expect(joined, contains('[v]'));
+      expect(args, containsAllInOrder(['-i', '/tmp/v.mp4']));
+      expect(args, containsAllInOrder(['-i', '/tmp/a.jpg']));
+      expect(args.last, '/tmp/o.mp4');
+    });
   });
 
   group('builders end-to-end (real ffmpeg)', () {
@@ -322,6 +341,17 @@ void main() {
       await writeConcatList(parts: [p1, p2], out: out);
       await runFfmpeg(concatArgs(parts: [p1, p2], out: out));
       expect(await mediaDurationSeconds(out), closeTo(3.0, 0.1));
+      final codecs = await probeCodecs(out);
+      expect(codecs, contains('h264'));
+      expect(codecs, contains('aac'));
+    });
+
+    test('overlayAvatarArgs output keeps duration and an audio track', () async {
+      final video = await makeClip('host3s.mp4'); // 640x360 + 440Hz sine
+      final avatar = await makeImage('avatar.png', w: 512, h: 512);
+      final out = File('${tmp.path}/overlaid.mp4');
+      await runFfmpeg(overlayAvatarArgs(video: video, avatar: avatar, out: out));
+      expect(await mediaDurationSeconds(out), closeTo(3.0, 0.3));
       final codecs = await probeCodecs(out);
       expect(codecs, contains('h264'));
       expect(codecs, contains('aac'));
