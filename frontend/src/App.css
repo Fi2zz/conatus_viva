@@ -1,0 +1,190 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  color: #6e6e73;
+  margin: 0 0 32px;
+}
+
+.form {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.field {
+  margin-bottom: 20px;
+}
+
+.field > label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.field input[type='text'],
+.field input[type='number'],
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.field input[type='range'] {
+  width: 100%;
+  accent-color: #0071e3;
+}
+
+.value {
+  color: #6e6e73;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.estimate {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: #1d1d1f;
+}
+
+.estimate strong {
+  color: #0071e3;
+}
+
+button[type='submit'] {
+  width: 100%;
+  padding: 12px;
+  background: #0071e3;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button[type='submit']:hover:not(:disabled) {
+  background: #0077ed;
+}
+
+button[type='submit']:disabled {
+  background: #99c3f5;
+  cursor: not-allowed;
+}
+
+.result {
+  margin-top: 32px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.result h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+
+.status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status.running {
+  background: #fff3cd;
+  color: #92600f;
+}
+
+.status.completed {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+.status.failed {
+  background: #f8d7da;
+  color: #842029;
+}
+
+.error {
+  margin: 12px 0;
+  color: #d3071b;
+  background: #fff5f5;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.logs {
+  margin: 16px 0;
+  background: #f5f5f7;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.log-line {
+  margin-bottom: 4px;
+  color: #3a3a3c;
+}
+
+.preview {
+  width: 100%;
+  border-radius: 12px;
+  margin-top: 8px;
+  background: #000;
+}
+
+.downloads {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.btn {
+  display: inline-block;
+  padding: 10px 20px;
+  background: #0071e3;
+  color: #fff;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn:hover {
+  background: #0077ed;
+}
