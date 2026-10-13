@@ -36,6 +36,15 @@ class PipelineConfig {
     required this.targetCount,
     required this.minClipS,
     required this.maxClipS,
+    this.t2vModel = 'wan3.0-video',
+    this.t2vResolution = '720P',
+    this.t2vRatio = 'adaptive',
+    this.t2vDuration = 5,
+    this.t2vAudio = true,
+    this.t2vWatermark = false,
+    this.t2vSeed,
+    this.t2vPollSeconds = 15,
+    this.t2vMaxWaitMinutes = 10,
     this.workspaceId = '',
     this.baseUrl = defaultBaseUrl,
     Map<String, String>? env,
@@ -76,6 +85,7 @@ class PipelineConfig {
     final llm = _section(json, 'llm');
     final tts = _section(json, 'tts');
     final i2v = _section(json, 'i2v');
+    final t2v = _section(json, 't2v');
     final oss = _section(json, 'oss');
     final video = _section(json, 'video');
     final workspaceId = _string(json, 'workspace_id', '');
@@ -99,6 +109,15 @@ class PipelineConfig {
       i2vSeed: _int(i2v, 'seed', 42),
       i2vPollSeconds: _int(i2v, 'poll_seconds', 15),
       i2vMaxWaitMinutes: _int(i2v, 'max_wait_minutes', 10),
+      t2vModel: _string(t2v, 'model', 'wan3.0-video'),
+      t2vResolution: _string(t2v, 'resolution', '720P'),
+      t2vRatio: _string(t2v, 'ratio', 'adaptive'),
+      t2vDuration: _int(t2v, 'duration', 5),
+      t2vAudio: _bool(t2v, 'audio', true),
+      t2vWatermark: _bool(t2v, 'watermark', false),
+      t2vSeed: _nullableInt(t2v, 'seed'),
+      t2vPollSeconds: _int(t2v, 'poll_seconds', 15),
+      t2vMaxWaitMinutes: _int(t2v, 'max_wait_minutes', 10),
       ossBucket: _string(oss, 'bucket', ''),
       ossEndpoint: _string(oss, 'endpoint', ''),
       ossPrefix: _string(oss, 'prefix', 'pipeline-exp/'),
@@ -127,6 +146,20 @@ class PipelineConfig {
   final int targetCount;
   final int minClipS;
   final int maxClipS;
+
+  /// 文生视频（万相 3.0）参数：模型、分辨率、宽高比、时长、是否保留原生音频、
+  /// 水印、种子（null = 服务端随机）、轮询与超时。CLI `--text-to-video` 会按
+  /// 这些默认值出片，可被命令行参数覆盖。
+  final String t2vModel;
+  final String t2vResolution;
+  final String t2vRatio;
+  final int t2vDuration;
+  final bool t2vAudio;
+  final bool t2vWatermark;
+  final int? t2vSeed;
+  final int t2vPollSeconds;
+  final int t2vMaxWaitMinutes;
+
   final String baseUrl;
 
   /// 百炼业务空间 ID（空 = 默认空间，走 [defaultApiHost]）。配置后所有
@@ -179,6 +212,11 @@ class PipelineConfig {
   static int _int(Map<String, dynamic> map, String key, int fallback) {
     final value = map[key];
     return value is int ? value : fallback;
+  }
+
+  static int? _nullableInt(Map<String, dynamic> map, String key) {
+    final value = map[key];
+    return value is int ? value : null;
   }
 
   static bool _bool(Map<String, dynamic> map, String key, bool fallback) {

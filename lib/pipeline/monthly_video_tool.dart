@@ -49,6 +49,11 @@ class GenerateMonthlyVideoTool extends Tool {
       description: '跳过配音，用静音音轨出片（字幕照常）',
       defaultValue: false,
     ),
+    ParamSpec.string(
+      'video_model',
+      description: '视频模型：wan2.6-i2v-flash / wan3.0-video / '
+          'wan3.0-video-prime（缺省用配置 i2v.model）',
+    ),
   ];
 
   @override
@@ -79,6 +84,7 @@ class GenerateMonthlyVideoTool extends Tool {
       contentId: context.string('content_id') ?? _defaultContentId(),
       dryRun: context.boolean('dry_run') ?? false,
       mute: context.boolean('mute') ?? false,
+      videoModel: context.string('video_model'),
     );
   }
 

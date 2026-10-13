@@ -35,6 +35,36 @@ void main() {
     expect(c.ossPrefix, 'pipeline-exp/');
   });
 
+  test('t2v section defaults to the wan3.0 text-to-video settings', () async {
+    final c = await PipelineConfig.load(file: await writeConfig(tmp, '{}'), env: {});
+    expect(c.t2vModel, 'wan3.0-video');
+    expect(c.t2vResolution, '720P');
+    expect(c.t2vRatio, 'adaptive');
+    expect(c.t2vDuration, 5);
+    expect(c.t2vAudio, isTrue);
+    expect(c.t2vWatermark, isFalse);
+    expect(c.t2vSeed, isNull);
+    expect(c.t2vPollSeconds, 15);
+    expect(c.t2vMaxWaitMinutes, 10);
+  });
+
+  test('t2v section overrides from config', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(
+        tmp,
+        '{"t2v": {"model": "wan3.0-video-prime", "resolution": "1080P", '
+            '"duration": 8, "audio": false, "watermark": true, "seed": 7}}',
+      ),
+      env: {},
+    );
+    expect(c.t2vModel, 'wan3.0-video-prime');
+    expect(c.t2vResolution, '1080P');
+    expect(c.t2vDuration, 8);
+    expect(c.t2vAudio, isFalse);
+    expect(c.t2vWatermark, isTrue);
+    expect(c.t2vSeed, 7);
+  });
+
   test('workspace_id routes every endpoint to the workspace maas host', () async {
     final c = await PipelineConfig.load(
       file: await writeConfig(tmp, '{"workspace_id": "ws-test123"}'),

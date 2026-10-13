@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../artifacts.dart';
-import '../bailian/i2v.dart';
+import '../bailian/dashscope_video.dart';
 import '../bailian/tts.dart';
 import '../bailian/uploader.dart';
 import '../config.dart';
@@ -48,7 +48,7 @@ class _RenderContext {
   final List<PhotoInfo> photos;
   final Workdir work;
   final ContentState state;
-  final I2vClient i2v;
+  final VideoGenClient i2v;
   final ImageUrlProvider urls;
   final PipelineConfig cfg;
 
@@ -94,7 +94,7 @@ Future<void> runRenderStep({
   required List<PhotoInfo> photos,
   required Workdir work,
   required ContentState state,
-  required I2vClient i2v,
+  required VideoGenClient i2v,
   required ImageUrlProvider urls,
   required PipelineConfig cfg,
   Future<void> Function(Duration delay)? sleep,

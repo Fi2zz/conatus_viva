@@ -4,10 +4,11 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'artifacts.dart';
-import 'bailian/i2v.dart';
+import 'bailian/dashscope_video.dart';
 import 'bailian/llm.dart';
 import 'bailian/tts.dart';
 import 'bailian/uploader.dart';
+import 'bailian/video_client.dart';
 import 'config.dart';
 import 'dialect_map.dart';
 import 'errors.dart';
@@ -30,6 +31,7 @@ class PipelineInput {
     required this.contentId,
     required this.dryRun,
     this.mute = false,
+    this.videoModel,
   });
 
   /// Local paths or `http(s)://` URLs (ingest accepts both, spec §3.1).
@@ -46,6 +48,11 @@ class PipelineInput {
   /// `true` → skip TTS entirely and fill silent narration tracks locally
   /// (subtitles still render); the video path works without TTS access.
   final bool mute;
+
+  /// Overrides `i2v.model` for this run (CLI `--video-model`); null → the
+  /// config default. The model name also selects which client is built
+  /// (`wan3*` → wan3.0 all-in-one, else wan2.6 i2v).
+  final String? videoModel;
 }
 
 /// Per-segment outcome of a run (planned in dry-run, final otherwise).
@@ -131,7 +138,7 @@ class VivaPipeline {
     required this.cfg,
     QwenClient? llm,
     TtsClient? tts,
-    I2vClient? i2v,
+    VideoGenClient? i2v,
     ImageUrlProvider? urls,
     http.Client? http,
     this.baseDir = 'pipeline_out',
@@ -164,9 +171,16 @@ class VivaPipeline {
 
   QwenClient? _llm;
   TtsClient? _tts;
-  I2vClient? _i2v;
+  VideoGenClient? _i2v;
   ImageUrlProvider? _urls;
   http.Client? _http;
+
+  /// Per-run `--video-model` override; set at the top of [run] before any
+  /// client is built. Null → [PipelineConfig.i2vModel].
+  String? _videoModelOverride;
+
+  /// The model this run actually bills against.
+  String get _effectiveVideoModel => _videoModelOverride ?? cfg.i2vModel;
 
   /// Photo id → capture time, populated by the classify step (fresh run or
   /// artifact load) so select keeps its time distribution on reruns.
@@ -186,11 +200,19 @@ class VivaPipeline {
     host: cfg.apiHost,
   );
 
-  // QwenClient/I2vClient pin their model params as private named fields, so
-  // only the apiKey/baseUrl/client are configurable here; their defaults
-  // match pipeline_config.json (Task 14 report notes this gap).
-  I2vClient get _i2vClient =>
-      _i2v ??= I2vClient(apiKey: cfg.requireApiKey(), client: _client, host: cfg.apiHost);
+  // QwenClient pins its model params as private named fields, so only the
+  // apiKey/baseUrl/client are configurable here. The i2v client is built from
+  // the effective model + config (resolution/watermark/seed) via
+  // [buildVideoClient], so `--video-model` actually selects the wire format.
+  VideoGenClient get _videoClient => _i2v ??= buildVideoClient(
+    model: _effectiveVideoModel,
+    apiKey: cfg.requireApiKey(),
+    client: _client,
+    host: cfg.apiHost,
+    resolution: cfg.i2vResolution,
+    watermark: cfg.i2vWatermark,
+    seed: cfg.i2vSeed,
+  );
 
   ImageUrlProvider get _urlProvider =>
       _urls ??= pickProvider(prefer: preferProvider, cfg: cfg, client: _client);
@@ -200,6 +222,7 @@ class VivaPipeline {
   Future<PipelineResult> run(PipelineInput input) async {
     final invalid = _contentIdProblem(input.contentId);
     if (invalid != null) return _failed(input, invalid.message);
+    _videoModelOverride = input.videoModel;
     final work = Workdir(baseDir, input.contentId);
     final state = ContentState.load(work.dir);
     _initRun(input, work, state);
@@ -255,6 +278,7 @@ class VivaPipeline {
       'dialect': input.dialect,
       'count': '${input.count}',
       'dry_run': '${input.dryRun}',
+      'video_model': _effectiveVideoModel,
     };
     _writeMetaOnce(input, work);
     state.save();
@@ -272,7 +296,7 @@ class VivaPipeline {
       'dry_run': input.dryRun,
       'llm_model': cfg.llmModel,
       'tts_model': cfg.ttsModel,
-      'i2v_model': cfg.i2vModel,
+      'i2v_model': _effectiveVideoModel,
       'created_at': DateTime.now().toIso8601String(),
     });
   }
@@ -629,7 +653,7 @@ class VivaPipeline {
       photos: selected,
       work: work,
       state: state,
-      i2v: _i2vClient,
+      i2v: _videoClient,
       urls: _urlProvider,
       cfg: cfg,
       onProgress: onProgress,

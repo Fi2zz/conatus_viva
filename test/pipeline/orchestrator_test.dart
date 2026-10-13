@@ -36,6 +36,10 @@ class MockBailian {
   /// Every TTS `instruction(s)` parameter seen, in request order.
   final List<String> ttsInstructions = <String>[];
 
+  /// The most recent i2v submit body, so tests can assert which model client
+  /// was wired in and what request shape it sent.
+  Map<String, dynamic>? lastI2vSubmitBody;
+
   int get totalCalls =>
       llmCalls + ttsCalls + i2vSubmits + i2vPolls + i2vDownloads + uploads;
 
@@ -47,6 +51,7 @@ class MockBailian {
     if (path.contains('/audio/tts')) return _tts(req);
     if (path.contains('video-synthesis')) {
       i2vSubmits++;
+      lastI2vSubmitBody = jsonDecode(req.body) as Map<String, dynamic>;
       return _json(<String, dynamic>{
         'output': <String, dynamic>{
           'task_id': 'task-$i2vSubmits',
@@ -222,6 +227,7 @@ void main() {
     String contentId = 't1',
     bool dryRun = false,
     bool mute = false,
+    String? videoModel,
   }) => PipelineInput(
     photos: photoPaths,
     dialect: '河南',
@@ -229,6 +235,7 @@ void main() {
     contentId: contentId,
     dryRun: dryRun,
     mute: mute,
+    videoModel: videoModel,
   );
 
   setUp(() async {
@@ -307,7 +314,7 @@ void main() {
     final parameters = schema['parameters'] as Map<String, Object?>;
     final properties = parameters['properties'] as Map<String, Object?>;
     for (final name in <String>[
-      'photos', 'dialect', 'count', 'content_id', 'dry_run',
+      'photos', 'dialect', 'count', 'content_id', 'dry_run', 'video_model',
     ]) {
       expect(properties.containsKey(name), isTrue, reason: 'missing $name');
     }
@@ -320,6 +327,49 @@ void main() {
     expect(dryRun['default'], false);
     final photos = properties['photos'] as Map<String, Object?>;
     expect(photos['type'], 'array');
+  });
+
+  test('video_model selects the wan3.0 client for i2v segments', () async {
+    final result = await makePipeline().run(makeInput(videoModel: 'wan3.0-video'));
+
+    expect(result.status, 'completed', reason: result.error);
+
+    final body = mock.lastI2vSubmitBody!;
+    expect(body['model'], 'wan3.0-video');
+    final input = body['input'] as Map<String, dynamic>;
+    final media = input['media'] as List<dynamic>;
+    final first = media.first as Map<String, dynamic>;
+    expect(first['type'], 'first_frame');
+    expect(first['url'], isA<String>());
+    expect((first['url'] as String).isNotEmpty, isTrue);
+    expect((body['parameters'] as Map).containsKey('shot_type'), isFalse);
+
+    final meta = jsonDecode(
+      Workdir(tmp.path, 't1').file(ArtifactPaths.meta).readAsStringSync(),
+    ) as Map<String, dynamic>;
+    expect(meta['i2v_model'], 'wan3.0-video');
+  });
+
+  test('tool forwards video_model into the pipeline', () async {
+    final ctx = Context.root(name: 'test');
+    provideTools(ctx).register(GenerateMonthlyVideoTool(pipeline: makePipeline()));
+    addTearDown(ctx.dispose);
+
+    final result = await ctx.tools.call(
+      ToolCall(
+        name: 'generate_monthly_video',
+        arguments: <String, Object?>{
+          'photos': photoPaths,
+          'dialect': '河南',
+          'count': 4,
+          'content_id': 't-tool',
+          'video_model': 'wan3.0-video',
+        },
+      ),
+    );
+
+    expect(result.isError, isFalse, reason: result.content);
+    expect(mock.lastI2vSubmitBody!['model'], 'wan3.0-video');
   });
 
   test('mute skips tts and still completes with silent tracks', () async {

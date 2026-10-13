@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:conatus/conatus.dart';
 
 import 'config.dart';
+import 'dialect_map.dart';
 import 'monthly_video_tool.dart';
 import 'orchestrator.dart';
 
@@ -23,6 +24,15 @@ class HostArgs {
     this.mute = false,
     this.contentId,
     this.agentTask,
+    this.videoModel,
+    this.textToVideo,
+    this.videoResolution,
+    this.videoRatio,
+    this.videoDuration,
+    this.videoAudio,
+    this.videoOut,
+    this.subtitleText,
+    this.subtitleFile,
   });
 
   /// Already expanded via [expandPhotos] (local paths or http(s) URLs).
@@ -42,6 +52,46 @@ class HostArgs {
 
   /// Natural-language task for the agent loop; null → direct tool call.
   final String? agentTask;
+
+  /// `--video-model` override (`wan3.0-video`, ...); null → config `i2v.model`.
+  final String? videoModel;
+
+  /// `--text-to-video`: a prompt for the standalone 万相 3.0 text-to-video
+  /// mode; non-null switches the host off the album pipeline.
+  final String? textToVideo;
+
+  /// Text-to-video overrides; null means "use the config `t2v` default".
+  final String? videoResolution;
+  final String? videoRatio;
+  final int? videoDuration;
+  final bool? videoAudio;
+  final String? videoOut;
+
+  /// Text-to-video subtitles: [subtitleText] is inline text (one line per cue)
+  /// and [subtitleFile] points at a `.srt` (copied verbatim) or plain text
+  /// file; the two are mutually exclusive. Null → no subtitle track.
+  final String? subtitleText;
+  final String? subtitleFile;
+}
+
+/// The non-null [t2vModelProblem] guard as a value: text-to-video only works
+/// on the 万相 3.0 all-in-one models (the wan2.6 client has no media-less
+/// body), so a mismatched override fails before any request is sent.
+String? t2vModelProblem(String model) => model.startsWith('wan3')
+    ? null
+    : '文生视频仅支持万相 3.0 模型（wan3.0-video / wan3.0-video-prime），'
+          '收到：$model';
+
+/// Effective text-to-video model: the CLI override or the config default.
+String t2vModelFor(PipelineConfig cfg, HostArgs args) =>
+    args.videoModel ?? cfg.t2vModel;
+
+/// The prompt actually sent for text-to-video: when a dialect region is given,
+/// the resolved instruction sentence (e.g. 「请用河南话表达。」) is appended so
+/// the model speaks in that dialect; unknown regions fall back to mandarin.
+String t2vPrompt(String prompt, String? dialect) {
+  if (dialect == null || dialect.isEmpty) return prompt;
+  return '$prompt\n${resolveDialect(dialect).instruction}';
 }
 
 /// Startup validation: returns the stderr guidance when the required secret
@@ -117,6 +167,7 @@ Future<ToolResult> runPipelineTool(Context ctx, HostArgs args) {
         if (args.contentId != null) 'content_id': args.contentId,
         'dry_run': args.dryRun,
         'mute': args.mute,
+        if (args.videoModel != null) 'video_model': args.videoModel,
       },
     ),
   );
@@ -161,6 +212,7 @@ String agentTask(HostArgs args) {
   if (explicit != null && explicit.isNotEmpty) return explicit;
   final id = args.contentId == null ? '' : '，content_id 用 ${args.contentId}';
   final mode = args.dryRun ? '，只 dry_run 估成本' : '';
+  final model = args.videoModel == null ? '' : '，video_model 用 ${args.videoModel}';
   return '用这些照片生成月度视频：${args.photos.join(', ')}；'
-      '方言地区 ${args.dialect}，最多 ${args.count} 张$id$mode。';
+      '方言地区 ${args.dialect}，最多 ${args.count} 张$id$mode$model。';
 }

@@ -17,6 +17,17 @@
     "poll_seconds": 15,
     "max_wait_minutes": 10
   },
+  "t2v": {
+    "model": "wan3.0-video",
+    "resolution": "720P",
+    "ratio": "adaptive",
+    "duration": 5,
+    "audio": true,
+    "watermark": false,
+    "seed": null,
+    "poll_seconds": 15,
+    "max_wait_minutes": 10
+  },
   "oss": {
     "bucket": "",
     "endpoint": "",
