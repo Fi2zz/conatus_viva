@@ -115,6 +115,8 @@ function App() {
     }
   }
 
+  const completed = run?.status === 'completed'
+
   return (
     <div className="app">
       <header>
@@ -124,102 +126,123 @@ function App() {
         </p>
       </header>
 
-      <form onSubmit={handleSubmit} className="form">
-        <div className="field">
-          <label>
-            时长 <span className="value">{duration} 秒</span>
-          </label>
-          <input
-            type="range"
-            min={t2v.duration_min}
-            max={t2v.duration_max}
-            step={1}
-            value={duration}
-            onChange={(e) => setDuration(Number(e.target.value))}
-          />
-        </div>
-
-        <div className="field">
-          <label>方言类型</label>
-          <select value={dialect} onChange={(e) => setDialect(e.target.value)}>
-            {dialects.map((d) => (
-              <option key={d.code} value={d.code}>
-                {d.name ?? d.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="field">
-          <label>主题文字</label>
-          <textarea
-            rows={3}
-            placeholder="例如：今天给大家讲讲河南的美食"
-            value={theme}
-            onChange={(e) => setTheme(e.target.value)}
-          />
-        </div>
-
-        <div className="estimate">
-          预估费用 <strong>¥{estimate.toFixed(2)}</strong>
-          <span className="value">（以实际账单为准）</span>
-        </div>
-
-        {formError && <div className="form-error">{formError}</div>}
-
-        {confirming ? (
-          <div className="confirm">
-            <div className="confirm-text">
-              预估费用 <strong>¥{estimate.toFixed(2)}</strong>
-              （以实际账单为准），确认生成？
-            </div>
-            <div className="confirm-actions">
-              <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
-                取消
-              </button>
-              <button type="button" className="btn-primary" onClick={confirmAndGenerate}>
-                确认生成
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button type="submit" disabled={polling}>
-            {polling ? '生成中...' : '生成视频'}
-          </button>
-        )}
-      </form>
-
-      {run && (
-        <section className="result">
-          <h2>运行状态</h2>
-          <div className={`status ${run.status}`}>{run.status}</div>
-
-          {run.error && <div className="error">错误：{run.error}</div>}
-
-          <div className="logs">
-            {run.logs.map((log, i) => (
-              <div key={i} className="log-line">
-                {log}
-              </div>
-            ))}
-          </div>
-
-          {run.status === 'completed' && (
-            <>
-              <video
-                className="preview"
-                controls
-                src={`/api/t2v/${run.id}/video`}
+      <div className="layout">
+        <div className="col-left">
+          <form onSubmit={handleSubmit} className="form">
+            <div className="field">
+              <label>
+                时长 <span className="value">{duration} 秒</span>
+              </label>
+              <input
+                type="range"
+                min={t2v.duration_min}
+                max={t2v.duration_max}
+                step={1}
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
               />
-              <div className="downloads">
-                <a href={`/api/t2v/${run.id}/video`} className="btn">
-                  下载视频
-                </a>
+            </div>
+
+            <div className="field">
+              <label>方言类型</label>
+              <select value={dialect} onChange={(e) => setDialect(e.target.value)}>
+                {dialects.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.name ?? d.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>主题文字</label>
+              <textarea
+                rows={3}
+                placeholder="例如：今天给大家讲讲河南的美食"
+                value={theme}
+                onChange={(e) => setTheme(e.target.value)}
+              />
+            </div>
+
+            <div className="estimate">
+              预估费用 <strong>¥{estimate.toFixed(2)}</strong>
+              <span className="value">（以实际账单为准）</span>
+            </div>
+
+            {formError && <div className="form-error">{formError}</div>}
+
+            {confirming ? (
+              <div className="confirm">
+                <div className="confirm-text">
+                  预估费用 <strong>¥{estimate.toFixed(2)}</strong>
+                  （以实际账单为准），确认生成？
+                </div>
+                <div className="confirm-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => setConfirming(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={confirmAndGenerate}
+                  >
+                    确认生成
+                  </button>
+                </div>
               </div>
-            </>
+            ) : (
+              <button type="submit" disabled={polling}>
+                {polling ? '生成中...' : '生成视频'}
+              </button>
+            )}
+          </form>
+
+          {run && (
+            <section className="result">
+              <h2>运行状态</h2>
+              <div className={`status ${run.status}`}>{run.status}</div>
+
+              {run.error && <div className="error">错误：{run.error}</div>}
+
+              <div className="logs">
+                {run.logs.map((log, i) => (
+                  <div key={i} className="log-line">
+                    {log}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
-        </section>
-      )}
+        </div>
+
+        <aside className="col-right">
+          <div className="video-card">
+            <h2>成片预览</h2>
+            {completed && run ? (
+              <>
+                <video
+                  className="preview"
+                  controls
+                  src={`/api/t2v/${run.id}/video`}
+                />
+                <div className="downloads">
+                  <a href={`/api/t2v/${run.id}/video`} className="btn">
+                    下载视频
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="video-placeholder">
+                {run?.status === 'running' ? '生成中，请稍候…' : '生成后在这里预览与下载'}
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }
