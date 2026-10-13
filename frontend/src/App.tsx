@@ -212,7 +212,7 @@ function App() {
                 src={`/api/t2v/${run.id}/video`}
               />
               <div className="downloads">
-                <a href={`/api/t2v/${run.id}/video`} download className="btn">
+                <a href={`/api/t2v/${run.id}/video`} className="btn">
                   下载视频
                 </a>
               </div>

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -105,9 +106,55 @@ class _WebViewPageState extends State<WebViewPage> {
               });
             }
           },
+          // The clip download is a navigation to an attachment URL, which
+          // WKWebView cannot render ("Plug-in handled load"). Intercept it and
+          // save the file natively instead.
+          onNavigationRequest: (request) {
+            if (_isVideoDownload(request.url)) {
+              unawaited(_saveVideo(request.url));
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
+  }
+
+  /// `/api/t2v/<id>/video` is the clip download; other navigations (and the
+  /// `<video>` subresource) pass through.
+  bool _isVideoDownload(String url) {
+    final uri = Uri.parse(url);
+    return uri.path.startsWith('/api/t2v/') && uri.path.endsWith('/video');
+  }
+
+  /// Fetches the clip from the local server and saves it to the user's
+  /// Downloads folder, then reveals it in Finder.
+  Future<void> _saveVideo(String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final client = HttpClient();
+      final response = await (await client.getUrl(Uri.parse(url))).close();
+      if (response.statusCode != 200) {
+        throw 'HTTP ${response.statusCode}';
+      }
+      final bytes = await response.fold<List<int>>(<int>[], (acc, chunk) {
+        acc.addAll(chunk);
+        return acc;
+      });
+
+      final home = Platform.environment['HOME'] ?? Directory.systemTemp.path;
+      final dir = Directory('$home/Downloads');
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final id = Uri.parse(url).pathSegments[2];
+      final file = File('${dir.path}/conatus_viva_$id.mp4');
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Process.run('open', <String>['-R', file.path]);
+      messenger.showSnackBar(SnackBar(content: Text('已下载到 ${file.path}')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('下载失败：$e')));
+    }
   }
 
   Future<void> _reload() async {
@@ -136,15 +183,17 @@ class _WebViewPageState extends State<WebViewPage> {
         ),
       );
     }
-    return Stack(
-      children: [
-        WebViewWidget(controller: controller),
-        if (_loading)
-          const ColoredBox(
-            color: Colors.white,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-      ],
+    return Scaffold(
+      body: Stack(
+        children: [
+          WebViewWidget(controller: controller),
+          if (_loading)
+            const ColoredBox(
+              color: Colors.white,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
     );
   }
 }
