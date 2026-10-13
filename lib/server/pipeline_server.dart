@@ -58,6 +58,19 @@ String _dialectName(String instruction) {
   return s;
 }
 
+/// Default directory for generated clips.
+///
+/// Absolute on purpose: a GUI app launched via `open` runs with cwd `/`, so a
+/// relative `pipeline_out/...` would be unwritable once the App Sandbox (which
+/// otherwise redirects cwd into the container) is off.
+String _defaultOutputDir() {
+  final home = Platform.environment['HOME'];
+  final base = (home != null && home.isNotEmpty)
+      ? home
+      : Directory.systemTemp.path;
+  return '$base/conatus_viva/speaker';
+}
+
 /// Runs one text-to-video generation for [contentId]; the default builds a 万相
 /// 3.0 client from the config, but tests inject a fake to stay offline.
 typedef SpeakerVideoRunner = Future<SpeakerVideoResult> Function({
@@ -95,6 +108,7 @@ class PipelineServer {
     this.port = 18080,
     this.speakerRunner,
     this.avatarImage,
+    this.outputDir,
   }) : _runs = <String, RunRecord>{};
 
   final PipelineConfig cfg;
@@ -106,6 +120,9 @@ class PipelineServer {
 
   /// The cartoon presenter composited into every clip (from the bundled asset).
   final File? avatarImage;
+
+  /// Absolute dir clips are written to; null → a per-user default under `$HOME`.
+  final String? outputDir;
 
   final Map<String, RunRecord> _runs;
 
@@ -293,6 +310,7 @@ class PipelineServer {
       durationS: durationS,
       contentId: contentId,
       avatar: avatar,
+      baseDir: outputDir ?? _defaultOutputDir(),
       pollSeconds: cfg.t2vPollSeconds,
       maxWaitMinutes: cfg.t2vMaxWaitMinutes,
       onProgress: onProgress,
