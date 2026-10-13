@@ -36,6 +36,10 @@ function App() {
   const [theme, setTheme] = useState('')
   const [run, setRun] = useState<RunStatus | null>(null)
   const [polling, setPolling] = useState(false)
+  // In-page confirmation: the app is hosted in a WKWebView that silently
+  // drops window.confirm/alert, so the cost gate is rendered, not native.
+  const [confirming, setConfirming] = useState(false)
+  const [formError, setFormError] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -78,30 +82,37 @@ function App() {
 
   const estimate = duration * t2v.yuan_per_second
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1: validate, then show the in-page cost confirmation.
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!theme.trim()) {
-      alert('请先输入主题文字')
+      setFormError('请先输入主题文字')
       return
     }
-    const ok = window.confirm(
-      `预估费用 ¥${estimate.toFixed(2)}（以实际账单为准），确认生成？`,
-    )
-    if (!ok) return
+    setFormError('')
+    setConfirming(true)
+  }
 
-    const res = await fetch('/api/t2v', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ duration, dialect, theme: theme.trim() }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      alert(data.error || '提交失败')
-      return
+  // Step 2: the user confirmed — actually start the paid generation.
+  const confirmAndGenerate = async () => {
+    setConfirming(false)
+    try {
+      const res = await fetch('/api/t2v', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration, dialect, theme: theme.trim() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFormError(data.error || `提交失败（HTTP ${res.status}）`)
+        return
+      }
+      setRun({ id: data.id, status: 'running', logs: ['任务已提交...'] })
+      setPolling(true)
+      pollRun(data.id)
+    } catch (err) {
+      setFormError(`提交失败：${err}`)
     }
-    setRun({ id: data.id, status: 'running', logs: ['任务已提交...'] })
-    setPolling(true)
-    pollRun(data.id)
   }
 
   return (
@@ -154,9 +165,28 @@ function App() {
           <span className="value">（以实际账单为准）</span>
         </div>
 
-        <button type="submit" disabled={polling}>
-          {polling ? '生成中...' : '生成视频'}
-        </button>
+        {formError && <div className="form-error">{formError}</div>}
+
+        {confirming ? (
+          <div className="confirm">
+            <div className="confirm-text">
+              预估费用 <strong>¥{estimate.toFixed(2)}</strong>
+              （以实际账单为准），确认生成？
+            </div>
+            <div className="confirm-actions">
+              <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
+                取消
+              </button>
+              <button type="button" className="btn-primary" onClick={confirmAndGenerate}>
+                确认生成
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="submit" disabled={polling}>
+            {polling ? '生成中...' : '生成视频'}
+          </button>
+        )}
       </form>
 
       {run && (
@@ -182,11 +212,7 @@ function App() {
                 src={`/api/t2v/${run.id}/video`}
               />
               <div className="downloads">
-                <a
-                  href={`/api/t2v/${run.id}/video`}
-                  download
-                  className="btn"
-                >
+                <a href={`/api/t2v/${run.id}/video`} download className="btn">
                   下载视频
                 </a>
               </div>
