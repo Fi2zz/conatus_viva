@@ -1,6 +1,7 @@
 /// Which handler serves an `/api/*` request.
 enum ApiRoute {
   dialects,
+  getEditModels,
   createT2v,
   getT2v,
   getT2vVideo,
@@ -18,6 +19,9 @@ enum ApiRoute {
 ApiRoute apiRouteFor(String method, String path) {
   if (path == '/api/dialects' && method == 'GET') {
     return ApiRoute.dialects;
+  }
+  if (path == '/api/edit-models' && method == 'GET') {
+    return ApiRoute.getEditModels;
   }
   if (path == '/api/t2v' && method == 'POST') {
     return ApiRoute.createT2v;

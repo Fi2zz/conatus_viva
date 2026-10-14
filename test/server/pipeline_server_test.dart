@@ -220,6 +220,19 @@ void main() {
     expect(t2v['duration_max'], 30);
   });
 
+  test('edit-models payload lists the three edit models', () async {
+    final res = await _get(server.boundPort!, '/api/edit-models');
+    expect(res.status, 200);
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final models = (data['edit_models'] as List).cast<Map<String, dynamic>>();
+    expect(models.map((m) => m['id']).toList(), [
+      'wan2.7-videoedit',
+      'happyhorse-1.0-video-edit',
+      'wanx2.1-vace-plus',
+    ]);
+    expect(models[0]['billing'], 'input_output');
+  });
+
   test('dialect codes resolve to their own instruction (no mandarin fallback)',
       () async {
     final res = await _get(server.boundPort!, '/api/dialects');

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_wanxiang/pipeline/bailian/wan30_video.dart';
 import 'package:flutter_wanxiang/pipeline/config.dart';
 import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
+import 'package:flutter_wanxiang/pipeline/edit_models.dart';
 import 'package:flutter_wanxiang/pipeline/errors.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
 import 'package:flutter_wanxiang/server/api_router.dart';
@@ -163,6 +164,8 @@ class PipelineServer {
     switch (apiRouteFor(req.method, req.uri.path)) {
       case ApiRoute.dialects:
         await _getDialects(req);
+      case ApiRoute.getEditModels:
+        await _getEditModels(req);
       case ApiRoute.createT2v:
         await _createT2v(req);
       case ApiRoute.getT2v:
@@ -194,6 +197,13 @@ class PipelineServer {
         'duration_min': t2vMinDurationS,
         'duration_max': t2vMaxDurationS,
       },
+    });
+  }
+
+  /// Serves the read-only edit-model price catalog (`GET /api/edit-models`).
+  Future<void> _getEditModels(HttpRequest req) async {
+    _sendJson(req, HttpStatus.ok, <String, dynamic>{
+      'edit_models': [for (final m in kEditModels) m.toJson()],
     });
   }
 
