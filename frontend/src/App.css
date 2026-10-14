@@ -291,3 +291,78 @@ button[type='submit']:disabled {
 .btn:hover {
   background: #0077ed;
 }
+
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+
+.mode-tabs .tab {
+  padding: 8px 16px;
+  border: 1px solid #d2d2d7;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.mode-tabs .tab:hover {
+  background: #f5f5f7;
+}
+
+.mode-tabs .tab.active {
+  background: #0071e3;
+  border-color: #0071e3;
+  color: #fff;
+}
+
+.edit-cost {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.edit-cost .form h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.edit-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-size: 14px;
+}
+
+.edit-table th,
+.edit-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f2;
+  vertical-align: top;
+}
+
+.edit-table th {
+  background: #f5f5f7;
+  color: #6e6e73;
+  font-weight: 500;
+}
+
+.edit-table tr:last-child td {
+  border-bottom: none;
+}
+
+.edit-table .model-name {
+  font-weight: 600;
+}
+
+.edit-table tr.unavailable,
+.edit-table tr.unavailable .model-name {
+  color: #8e8e93;
+}

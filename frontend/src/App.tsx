@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import EditCostEstimator from './EditCostEstimator'
 import './App.css'
 
 interface Dialect {
@@ -30,6 +31,7 @@ const DEFAULT_T2V: T2vConfig = {
 }
 
 function App() {
+  const [mode, setMode] = useState<'speaker' | 'edit-cost'>('speaker')
   const [dialects, setDialects] = useState<Dialect[]>([])
   const [t2v, setT2v] = useState<T2vConfig>(DEFAULT_T2V)
   const [duration, setDuration] = useState(5)
@@ -129,6 +131,24 @@ function App() {
         </p>
       </header>
 
+      <nav className="mode-tabs">
+        <button
+          type="button"
+          className={mode === 'speaker' ? 'tab active' : 'tab'}
+          onClick={() => setMode('speaker')}
+        >
+          方言配音主讲人
+        </button>
+        <button
+          type="button"
+          className={mode === 'edit-cost' ? 'tab active' : 'tab'}
+          onClick={() => setMode('edit-cost')}
+        >
+          视频编辑成本
+        </button>
+      </nav>
+
+      {mode === 'speaker' ? (
       <div className="layout">
         <div className="col-left">
           <form onSubmit={handleSubmit} className="form">
@@ -248,6 +268,9 @@ function App() {
           </div>
         </aside>
       </div>
+      ) : (
+        <EditCostEstimator />
+      )}
     </div>
   )
 }
