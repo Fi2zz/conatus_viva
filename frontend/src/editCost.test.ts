@@ -4,6 +4,7 @@ import {
   estimateCost,
   isApplicable,
   outputSeconds,
+  parseEditModels,
   resolutionPrice,
   type EditModel,
 } from './editCost'
@@ -66,4 +67,13 @@ describe('estimateCost', () => {
     expect(estimateCost(wan, 11, '720P')).toBeUndefined())
   it('missing resolution → undefined', () =>
     expect(estimateCost(vace, 4, '1080P')).toBeUndefined())
+})
+
+describe('parseEditModels', () => {
+  it('returns the catalog list', () =>
+    expect(parseEditModels({ edit_models: [wan] })).toEqual([wan]))
+  it('throws when edit_models[] is missing (e.g. a 404/500 error body)', () =>
+    expect(() => parseEditModels({ error: 'not found' })).toThrow())
+  it('throws on a non-object payload', () =>
+    expect(() => parseEditModels(null)).toThrow())
 })

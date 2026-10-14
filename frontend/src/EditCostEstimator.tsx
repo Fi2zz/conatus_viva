@@ -3,6 +3,7 @@ import {
   billedSeconds,
   estimateCost,
   isApplicable,
+  parseEditModels,
   type EditModel,
 } from './editCost'
 
@@ -21,8 +22,12 @@ export default function EditCostEstimator() {
 
   useEffect(() => {
     fetch('/api/edit-models')
-      .then((r) => r.json())
-      .then((d) => setModels(d.edit_models ?? []))
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(parseEditModels)
+      .then(setModels)
       .catch((e) => {
         console.error('Failed to load edit models:', e)
         setError('加载编辑模型定价失败，请重试')

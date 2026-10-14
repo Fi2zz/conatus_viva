@@ -69,3 +69,17 @@ export function estimateCost(
   if (price === undefined) return undefined
   return billedSeconds(m, inputS) * price
 }
+
+/**
+ * Parse the `GET /api/edit-models` body. Throws when the payload is not a
+ * catalog, so a non-catalog response (a 404/500 `{error: ...}` body, an empty
+ * body, HTML) surfaces as the component's error + retry instead of an empty
+ * table.
+ */
+export function parseEditModels(payload: unknown): EditModel[] {
+  const models = (payload as { edit_models?: unknown } | null)?.edit_models
+  if (!Array.isArray(models)) {
+    throw new Error('edit-models payload missing edit_models[]')
+  }
+  return models as EditModel[]
+}
