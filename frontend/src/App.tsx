@@ -23,7 +23,8 @@ interface RunStatus {
 }
 
 const DEFAULT_T2V: T2vConfig = {
-  yuan_per_second: 0.15,
+  // wan3.0-video 720P 限时 7 折实价（原价 0.6）；服务端 /api/dialects 会覆盖。
+  yuan_per_second: 0.42,
   duration_min: 2,
   duration_max: 30,
 }
@@ -81,6 +82,8 @@ function App() {
   )
 
   const estimate = duration * t2v.yuan_per_second
+  // Trim float noise (e.g. 0.7339238) for the on-screen unit price.
+  const unitPrice = Number(t2v.yuan_per_second.toFixed(4))
 
   // Step 1: validate, then show the in-page cost confirmation.
   const handleSubmit = (e: React.FormEvent) => {
@@ -166,7 +169,9 @@ function App() {
 
             <div className="estimate">
               预估费用 <strong>¥{estimate.toFixed(2)}</strong>
-              <span className="value">（以实际账单为准）</span>
+              <span className="value">
+                （单价 ¥{unitPrice}/秒 × {duration} 秒，以实际账单为准）
+              </span>
             </div>
 
             {formError && <div className="form-error">{formError}</div>}
@@ -175,7 +180,7 @@ function App() {
               <div className="confirm">
                 <div className="confirm-text">
                   预估费用 <strong>¥{estimate.toFixed(2)}</strong>
-                  （以实际账单为准），确认生成？
+                  （单价 ¥{unitPrice}/秒 × {duration} 秒，以实际账单为准），确认生成？
                 </div>
                 <div className="confirm-actions">
                   <button

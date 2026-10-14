@@ -45,7 +45,7 @@ class PipelineConfig {
     this.t2vSeed,
     this.t2vPollSeconds = 15,
     this.t2vMaxWaitMinutes = 10,
-    this.t2vYuanPerSecond = 0.15,
+    this.t2vYuanPerSecond = 0.42,
     this.workspaceId = '',
     this.baseUrl = defaultBaseUrl,
     Map<String, String>? env,
@@ -119,7 +119,7 @@ class PipelineConfig {
       t2vSeed: _nullableInt(t2v, 'seed'),
       t2vPollSeconds: _int(t2v, 'poll_seconds', 15),
       t2vMaxWaitMinutes: _int(t2v, 'max_wait_minutes', 10),
-      t2vYuanPerSecond: _double(t2v, 'yuan_per_second', 0.15),
+      t2vYuanPerSecond: _double(t2v, 'yuan_per_second', 0.42),
       ossBucket: _string(oss, 'bucket', ''),
       ossEndpoint: _string(oss, 'endpoint', ''),
       ossPrefix: _string(oss, 'prefix', 'pipeline-exp/'),
@@ -163,7 +163,9 @@ class PipelineConfig {
   final int t2vMaxWaitMinutes;
 
   /// 文生视频每秒计价（元），用于前端生成前费用预估；
-  /// 由配置 `t2v.yuan_per_second` 提供，默认 0.15 占位。
+  /// 由配置 `t2v.yuan_per_second` 提供。默认 0.42 = wan3.0-video 720P
+  /// 限时 7 折实价（原价 0.6）；单价与计费口径见
+  /// `docs/万相视频生成与编辑成本核算_v1.0.md`。
   final double t2vYuanPerSecond;
 
   final String baseUrl;

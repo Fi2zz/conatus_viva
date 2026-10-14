@@ -215,7 +215,7 @@ void main() {
     expect(res.status, 200);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     final t2v = data['t2v'] as Map<String, dynamic>;
-    expect(t2v['yuan_per_second'], 0.15);
+    expect(t2v['yuan_per_second'], 0.42);
     expect(t2v['duration_min'], 2);
     expect(t2v['duration_max'], 30);
   });

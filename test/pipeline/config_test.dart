@@ -65,7 +65,7 @@ void main() {
     expect(c.t2vSeed, 7);
   });
 
-  test('t2v yuan_per_second parses, defaults to 0.15', () async {
+  test('t2v yuan_per_second parses, defaults to the wan3.0 price', () async {
     final c = await PipelineConfig.load(
       file: await writeConfig(tmp, '{"t2v": {"yuan_per_second": 0.2}}'),
       env: {},
@@ -76,7 +76,9 @@ void main() {
       file: await writeConfig(tmp, '{}'),
       env: {},
     );
-    expect(dflt.t2vYuanPerSecond, 0.15);
+    // wan3.0-video 720P 限时 7 折实价；原价 0.6 见
+    // docs/万相视频生成与编辑成本核算_v1.0.md。
+    expect(dflt.t2vYuanPerSecond, 0.42);
   });
 
   test('workspace_id routes every endpoint to the workspace maas host', () async {
