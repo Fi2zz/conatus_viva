@@ -81,13 +81,13 @@ React「视频编辑成本」模式 ──GET /api/edit-models──▶ Dart ser
 - `App.tsx` 顶部加**模式切换**：「方言配音主讲人」/「视频编辑成本」（`useState<'speaker' | 'edit-cost'>`）。两模式各自渲染；主讲人模式现有逻辑不动。
 - 新增组件 `frontend/src/EditCostEstimator.tsx`：
   - 拉一次 `GET /api/edit-models`（`useEffect`）；失败显示错误、可重试。
-  - 控件：**素材时长滑杆**（1–60s，默认 5）、**分辨率选择**（720P/1080P）。
+  - 控件：**素材时长滑杆**（1–60s，默认 5）、**分辨率选择**（720P / 1080P）。
   - 计算（通用解释器）：
     - `outputSeconds = rule(input)`：`same_as_input → input`；`fixed → value`；`min → min(input, value)`。
     - `billedSeconds = billing === 'output' ? outputSeconds : input + outputSeconds`。
-    - `cost = billedSeconds × 该模型该分辨率的单价`。
-  - 渲染对比表：每个模型一行，列 = 模型名 / 计费口径 / 计费秒数 / 720P 费用 / 1080P 费用 / 免费额度。
-  - **适用性**：素材时长超出 `[input_min_s, input_max_s]` → 该行标灰并提示不可用；无对应分辨率 → 显示「—」。
+    - `cost = billedSeconds × 该模型在所选分辨率的单价`。
+  - 渲染对比表（**按所选分辨率**）：每个模型一行，列 = 模型名 / 计费口径 / 计费秒数 / **预估费用** / 免费额度。
+  - **适用性**：素材时长超出 `[input_min_s, input_max_s]` → 该行标灰并提示不可用；该模型无所选分辨率（如 VACE 无 1080P）→ 费用显示「不支持」。
   - 口径说明：区分「输入+输出双计」与「仅输出」；底部注明「以实际账单为准」。
 - 样式：复用现有 `.form/.field/.value` 等类，必要处加少量 `.mode-tabs` / 表格样式到 `App.css`。
 
