@@ -1,6 +1,9 @@
-# conatus_viva — 月度相册视频流水线 & 方言配音主讲人
+# conatus_viva — 图片 / 视频两类生成与月度相册流水线
 
 输入一组照片（本地路径或 URL）和方言地区，端到端产出 15–20 秒的相册视频：多模态选片、口播文案、方言配音、万相图生视频、字幕合成。全程断点续跑、不重复扣费。
+
+桌面 app 把生成能力分成两类：**图片合成**（万相图像 2.7 / 千问图像 3.0 / Z-Image）
+与**视频合成**（万相 3.0 文生视频、方言配音主讲人），另有视频编辑成本对比。
 
 核心是纯 Dart 管线（`lib/pipeline/`，不依赖 Flutter），三种使用形态：
 
@@ -62,6 +65,31 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 
 运行中进度打在 stderr（`[mm:ss]` 前缀），stdout 只输出结果 JSON。
 
+## 图片合成与通用文生视频（桌面 app）
+
+桌面 app 顶部四个平行 tab：**图片合成** / **文生视频** / **方言配音主讲人** / **视频编辑成本**。
+
+### 图片合成
+
+三种子模式：文生图、图生图·编辑、系列图（仅万相 2.7）。
+
+| 模型 | 文生图 | 图生图 | 系列图 | 最大张数 | 参考图上限 |
+|---|---|---|---|---|---|
+| `qwen-image-3.0-pro` | ✅ | ✅ | — | 6 | 3 |
+| `qwen-image-3.0` | ✅ | ✅ | — | 6 | 3 |
+| `wan2.7-image-pro` | ✅ | ✅ | ✅ | 4（组图 12） | 9 |
+| `wan2.7-image` | ✅ | ✅ | ✅ | 4（组图 12） | 9 |
+| `z-image-turbo` | ✅ | — | — | 1 | — |
+
+- 参考图从本地上传，前端转 base64 直传，单张 ≤10MB，不依赖 OSS。
+- 计费按**成功张数**：`张数 × 该分辨率档单价`；失败或超时不计费。
+- 结果落在 `~/conatus_viva/images/<id>/image-XX.png`，页内网格预览与逐张下载。
+
+### 通用文生视频
+
+提示词 + 模型（`wan3.0-video` / `wan3.0-video-prime`）+ 分辨率 / 宽高比 / 时长 / 音频，
+复用万相 3.0 t2v 能力；成片在 `~/conatus_viva/videos/<id>/video.mp4`，页内预览与下载。
+
 ## 方言配音主讲人（Flutter 桌面 app）
 
 `lib/main.dart` 是桌面壳：启动内嵌 HTTP server，WebView 加载打包进来的 React 前端。填主题、选方言、定时长（2–30 秒），生成带卡通主讲人（左下角头像叠加）的方言口播视频，页内预览并下载 mp4。
@@ -96,6 +124,13 @@ app 启动时 `lib/server/web_build_assets.dart` 把打包的 `web_build/` 物�
 | 路由 | 用途 |
 |---|---|
 | `GET /api/dialects` | 方言下拉选项（来自 `kDialectTable` 去重） |
+| `GET /api/models` | 图片 / 视频模型目录（能力 + 配置后单价） |
+| `POST /api/images` | 提交图片任务（模型 / 模式 / 提示词 / 张数 / 参考图） |
+| `GET /api/images/<id>` | 图片任务状态、日志、结果与费用 |
+| `GET /api/images/<id>/<n>` | 下载第 n 张图片 |
+| `POST /api/videos` | 提交通用文生视频（模型 / 提示词 / 分辨率 / 时长 / 音频） |
+| `GET /api/videos/<id>` | 视频任务状态与费用 |
+| `GET /api/videos/<id>/video` | 下载成片 mp4 |
 | `POST /api/t2v` | 提交一次主讲人文生视频生成（主题 + 方言 + 时长） |
 | `GET /api/t2v/<id>` | 查询生成状态/结果元数据 |
 | `GET /api/t2v/<id>/video` | 下载成片 mp4 |
@@ -111,7 +146,9 @@ lib/pipeline/
   state.dart         state.json 状态机（原子写、24h 任务恢复、成本核算）
   artifacts.dart     工件目录布局（产物存在即跳过）
   ffmpeg.dart        ffprobe 测时长 + 命令拼装（Ken Burns / 归一化 / 拼接 / 静音）
-  bailian/           百炼客户端：llm（分类/文案）、tts（配音）、i2v（万相2.6）、wan30_video（万相3.0）、video_client（按模型名选 client）、uploader（图片供给）
+  generation_models.dart 图片/视频模型目录（kind + 能力 + 价格档）
+  image_generation.dart  图片任务编排（校验 → 提交 → 轮询 → 下载 → 计费）
+  bailian/           百炼客户端：llm（分类/文案）、tts（配音）、i2v（万相2.6）、wan30_video（万相3.0）、video_client（按模型名选 client）、image_client（图片三族）、uploader（图片供给）
   steps/             六步流水线：ingest → classify/select → script → tts → render → compose
   orchestrator.dart  编排器（步级幂等 + dry-run 停点 + --mute）
   speaker_video.dart 主讲人文生视频（t2v + ffmpeg 头像叠加，桌面 app 用）
@@ -135,6 +172,8 @@ frontend/             React 前端（方言配音主讲人 UI），构建产物�
 - `tts.voice_id`：null → 用 `fallback_model`（qwen3-tts-flash）+ `fallback_voice`（系统音色 Cherry）；填 qwen-audio 音色 ID → 走方言指令通道（`请用河南话表达。`）
 - `i2v`：模型/分辨率/水印/种子/轮询参数，全部显式钉死防默认抬价
 - `t2v`：文生视频（万相 3.0）参数——模型/分辨率/宽高比/时长/是否保留原生音频/水印/种子/轮询/`yuan_per_second`（费用预估单价，默认 0.42），CLI `--text-to-video` 的默认来源
+- `image`：图片任务的轮询间隔、超时与默认模型
+- `pricing`：`image.<model>.<档位>`（元/张）与 `video.<model>.<分辨率>`（元/秒）；为**配置占位默认值**，以控制台账单为准
 
 OSS 回退（`--prefer-provider oss`）另需环境变量 `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` 及配置里的 `oss.bucket` / `oss.endpoint`。
 
@@ -172,6 +211,7 @@ dart analyze lib bin test  # 零告警基线
 
 - 设计 spec：`docs/superpowers/specs/2026-10-10-monthly-album-video-pipeline-design.md`
 - 实施计划：`docs/superpowers/plans/2026-10-10-conatus-viva-pipeline.md`
+- 图片/视频双类型 spec / 计划：`docs/superpowers/specs/2026-10-22-image-and-video-generation-split-design.md`、`docs/superpowers/plans/2026-10-22-image-and-video-generation-split.md`
 - 主讲人工具 spec / 计划：`docs/superpowers/specs/2026-10-13-speaker-text-to-video-tool-design.md`、`docs/superpowers/plans/2026-10-13-speaker-text-to-video-tool.md`
 - M0 冒烟记录：`docs/superpowers/plans/m0-smoke-report.md`
 - 方言配音方案：`docs/万相图生视频方言配音方案_v1.0.md`
