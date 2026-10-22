@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import CostGate from './CostGate'
+import { downloadFile } from './download'
 import { estimateImageCost, unitPrice } from './imageCost'
 import { useJob, type JobBase } from './useJob'
 
@@ -25,6 +26,11 @@ interface ImageJobDto extends JobBase {
 interface RefImage {
   name: string
   dataUrl: string
+}
+
+interface PreviewImage {
+  src: string
+  name: string
 }
 
 const MODE_LABELS: Record<ImageModeName, string> = {
@@ -63,7 +69,7 @@ export default function ImageStudio() {
   const [n, setN] = useState(1)
   const [seed, setSeed] = useState('')
   const [refs, setRefs] = useState<RefImage[]>([])
-  const [preview, setPreview] = useState<RefImage | null>(null)
+  const [preview, setPreview] = useState<PreviewImage | null>(null)
   const [dragging, setDragging] = useState(false)
   const dragDepth = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -322,7 +328,7 @@ export default function ImageStudio() {
                       type="button"
                       className="ref-preview"
                       aria-label={`预览 ${ref.name}`}
-                      onClick={() => setPreview(ref)}
+                      onClick={() => setPreview({ src: ref.dataUrl, name: ref.name })}
                     >
                       <img src={ref.dataUrl} alt={ref.name} title={ref.name} />
                     </button>
@@ -409,21 +415,37 @@ export default function ImageStudio() {
             <>
               <div className="image-grid">
                 {job.results.filter((r) => r.ok !== false).map((r) => (
-                  <a key={r.index} href={imageFileUrl(job.id, r.index)} download>
+                  <button
+                    key={r.index}
+                    type="button"
+                    className="image-thumb"
+                    aria-label={`预览第 ${r.index} 张`}
+                    onClick={() =>
+                      setPreview({
+                        src: imageFileUrl(job.id, r.index),
+                        name: `image-${String(r.index).padStart(2, '0')}.png`,
+                      })
+                    }
+                  >
                     <img src={imageFileUrl(job.id, r.index)} alt={`生成图 ${r.index}`} />
-                  </a>
+                  </button>
                 ))}
               </div>
               <div className="downloads">
                 {job.results.filter((r) => r.ok !== false).map((r) => (
-                  <a
+                  <button
                     key={r.index}
-                    href={imageFileUrl(job.id, r.index)}
+                    type="button"
                     className="btn"
-                    download
+                    onClick={() => {
+                      void downloadFile(
+                        imageFileUrl(job.id, r.index),
+                        `image-${String(r.index).padStart(2, '0')}.png`,
+                      ).catch((e) => setFormError(`${e}`))
+                    }}
                   >
                     下载第 {r.index} 张
-                  </a>
+                  </button>
                 ))}
               </div>
               {job.results.some((r) => r.ok === false) && (
@@ -450,7 +472,7 @@ export default function ImageStudio() {
           onClick={() => setPreview(null)}
         >
           <img
-            src={preview.dataUrl}
+            src={preview.src}
             alt={preview.name}
             onClick={(e) => e.stopPropagation()}
           />

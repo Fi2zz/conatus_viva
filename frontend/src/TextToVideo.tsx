@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import CostGate from './CostGate'
+import { downloadFile } from './download'
 import { unitPriceForTier } from './imageCost'
 import { useJob, type JobBase } from './useJob'
 
@@ -232,9 +233,17 @@ export default function TextToVideo() {
             <>
               <video className="preview" controls src={`/api/videos/${job.id}/video`} />
               <div className="downloads">
-                <a href={`/api/videos/${job.id}/video`} className="btn">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    void downloadFile(`/api/videos/${job.id}/video`, 'video.mp4').catch((e) =>
+                      setFormError(`${e}`),
+                    )
+                  }}
+                >
                   下载视频
-                </a>
+                </button>
               </div>
               {typeof job.cost === 'number' && (
                 <p className="value">本次计费 ¥{job.cost.toFixed(2)}（以实际账单为准）</p>

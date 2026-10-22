@@ -530,3 +530,26 @@ button[type='submit']:disabled {
 .ref-lightbox-close:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+.image-thumb {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: zoom-in;
+  display: block;
+}
+
+.image-thumb img {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+  background: #f5f5f7;
+}
+
+button.btn {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
