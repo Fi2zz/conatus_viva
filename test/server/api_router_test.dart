@@ -21,5 +21,14 @@ void main() {
       expect(apiRouteFor('GET', '/api/nope'), ApiRoute.unknown);
       expect(apiRouteFor('GET', '/favicon.ico'), ApiRoute.unknown);
     });
+
+    test('image + models routes, file wins over bare id', () {
+      expect(apiRouteFor('GET', '/api/models'), ApiRoute.getModels);
+      expect(apiRouteFor('POST', '/api/images'), ApiRoute.createImage);
+      expect(apiRouteFor('GET', '/api/images/img-1/2'), ApiRoute.getImageFile);
+      expect(apiRouteFor('GET', '/api/images/img-1'), ApiRoute.getImage);
+      expect(apiRouteFor('POST', '/api/images/img-1/2'), ApiRoute.unknown);
+      expect(apiRouteFor('GET', '/api/models/x'), ApiRoute.unknown);
+    });
   });
 }

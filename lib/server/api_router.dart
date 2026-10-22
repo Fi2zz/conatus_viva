@@ -2,9 +2,13 @@
 enum ApiRoute {
   dialects,
   getEditModels,
+  getModels,
   createT2v,
   getT2v,
   getT2vVideo,
+  createImage,
+  getImage,
+  getImageFile,
   unknown,
 }
 
@@ -23,12 +27,22 @@ ApiRoute apiRouteFor(String method, String path) {
   if (path == '/api/edit-models' && method == 'GET') {
     return ApiRoute.getEditModels;
   }
+  if (path == '/api/models' && method == 'GET') {
+    return ApiRoute.getModels;
+  }
   if (path == '/api/t2v' && method == 'POST') {
     return ApiRoute.createT2v;
   }
   if (path.startsWith('/api/t2v/') && method == 'GET') {
     if (path.endsWith('/video')) return ApiRoute.getT2vVideo;
     return ApiRoute.getT2v;
+  }
+  if (path == '/api/images' && method == 'POST') {
+    return ApiRoute.createImage;
+  }
+  if (path.startsWith('/api/images/') && method == 'GET') {
+    if (path.split('/').length == 5) return ApiRoute.getImageFile;
+    return ApiRoute.getImage;
   }
   return ApiRoute.unknown;
 }

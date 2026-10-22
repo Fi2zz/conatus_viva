@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_wanxiang/pipeline/bailian/image_client.dart';
 import 'package:flutter_wanxiang/pipeline/bailian/wan30_video.dart';
 import 'package:flutter_wanxiang/pipeline/config.dart';
 import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
 import 'package:flutter_wanxiang/pipeline/edit_models.dart';
 import 'package:flutter_wanxiang/pipeline/errors.dart';
+import 'package:flutter_wanxiang/pipeline/generation_models.dart';
+import 'package:flutter_wanxiang/pipeline/image_generation.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
 import 'package:flutter_wanxiang/server/api_router.dart';
 
@@ -72,6 +75,15 @@ String _defaultOutputDir() {
   return '$base/conatus_viva/speaker';
 }
 
+/// Default image output root (`$HOME/conatus_viva/images`).
+String _defaultImagesDir() {
+  final home = Platform.environment['HOME'];
+  final base = (home != null && home.isNotEmpty)
+      ? home
+      : Directory.systemTemp.path;
+  return '$base/conatus_viva/images';
+}
+
 /// Runs one text-to-video generation for [contentId]; the default builds a 万相
 /// 3.0 client from the config, but tests inject a fake to stay offline.
 typedef SpeakerVideoRunner = Future<SpeakerVideoResult> Function({
@@ -97,6 +109,33 @@ class RunRecord {
   String? error;
 }
 
+/// In-memory record shared by image and video jobs.
+class JobRunRecord {
+  JobRunRecord({required this.id})
+    : status = 'running',
+      logs = <String>[],
+      imagePaths = <String>[],
+      cost = 0,
+      createdAt = DateTime.now();
+
+  final String id;
+  String status; // running | completed | failed
+  final List<String> logs;
+  final DateTime createdAt;
+  final List<String> imagePaths;
+  double cost;
+  String? filePath;
+  String? error;
+}
+
+/// Runs one image-generation task; tests inject a fake to stay offline.
+typedef ImageRunner =
+    Future<ImageJob> Function({
+      required ImageRequest request,
+      required String contentId,
+      required void Function(String message) onProgress,
+    });
+
 /// HTTP server serving the React UI and the text-to-video API.
 ///
 /// Static files are served from [staticDir] (the React build output). The API
@@ -108,9 +147,12 @@ class PipelineServer {
     required this.staticDir,
     this.port = 18080,
     this.speakerRunner,
+    this.imageRunner,
     this.avatarImage,
     this.outputDir,
-  }) : _runs = <String, RunRecord>{};
+    this.imagesOutputDir,
+  }) : _runs = <String, RunRecord>{},
+       _imageJobs = <String, JobRunRecord>{};
 
   final PipelineConfig cfg;
   final Directory staticDir;
@@ -119,13 +161,20 @@ class PipelineServer {
   /// Test seam: when set, replaces the real 万相 generation.
   final SpeakerVideoRunner? speakerRunner;
 
+  /// Test seam: when set, replaces the real image generation.
+  final ImageRunner? imageRunner;
+
   /// The cartoon presenter composited into every clip (from the bundled asset).
   final File? avatarImage;
 
   /// Absolute dir clips are written to; null → a per-user default under `$HOME`.
   final String? outputDir;
 
+  /// Absolute dir images are written to; null → `$HOME/conatus_viva/images`.
+  final String? imagesOutputDir;
+
   final Map<String, RunRecord> _runs;
+  final Map<String, JobRunRecord> _imageJobs;
 
   HttpServer? _server;
 
@@ -166,17 +215,52 @@ class PipelineServer {
         await _getDialects(req);
       case ApiRoute.getEditModels:
         await _getEditModels(req);
+      case ApiRoute.getModels:
+        await _getModels(req);
       case ApiRoute.createT2v:
         await _createT2v(req);
       case ApiRoute.getT2v:
         await _getT2v(req);
       case ApiRoute.getT2vVideo:
         await _getT2vVideo(req);
+      case ApiRoute.createImage:
+        await _createImage(req);
+      case ApiRoute.getImage:
+        await _getImage(req);
+      case ApiRoute.getImageFile:
+        await _getImageFile(req);
       case ApiRoute.unknown:
         _sendJson(req, HttpStatus.notFound, <String, dynamic>{
           'error': 'not found',
         });
     }
+  }
+
+  /// Serves the model catalog with config-resolved prices (`GET /api/models`).
+  Future<void> _getModels(HttpRequest req) async {
+    _sendJson(req, HttpStatus.ok, <String, dynamic>{
+      'image': <Map<String, Object?>>[
+        for (final model in kImageModels)
+          model.toJson(
+            resolvePrices(
+              defaults: model.defaultPrices,
+              overrides: cfg.imagePrices,
+              model: model.id,
+            ),
+          ),
+      ],
+      'video': <Map<String, Object?>>[
+        for (final model in kTextToVideoModels)
+          model.toJson(
+            resolvePrices(
+              defaults: model.defaultPrices,
+              overrides: cfg.videoPrices,
+              model: model.id,
+            ),
+          ),
+      ],
+      'image_default_model': cfg.imageDefaultModel,
+    });
   }
 
   Future<void> _getDialects(HttpRequest req) async {
@@ -205,6 +289,188 @@ class PipelineServer {
     _sendJson(req, HttpStatus.ok, <String, dynamic>{
       'edit_models': [for (final m in kEditModels) m.toJson()],
     });
+  }
+
+  Future<void> _createImage(HttpRequest req) async {
+    if (req.headers.contentType?.mimeType != 'application/json') {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'expected application/json',
+      });
+      return;
+    }
+    final body = await _readJsonBody(req);
+    if (body == null) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'invalid JSON body',
+      });
+      return;
+    }
+
+    final modelId = (body['model'] as String?)?.trim() ?? '';
+    final model = findImageModel(modelId);
+    if (model == null) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': '未知图片模型：$modelId',
+      });
+      return;
+    }
+    final modeName = body['mode'] as String? ?? '';
+    final mode = _imageMode(modeName);
+    if (mode == null) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'mode 必须是 t2i/i2i/series',
+      });
+      return;
+    }
+
+    final rawRefs = body['refs'];
+    final request = ImageRequest(
+      model: model.id,
+      family: model.family,
+      mode: mode,
+      prompt: (body['prompt'] as String?)?.trim() ?? '',
+      negativePrompt: (body['negative_prompt'] as String?)?.trim(),
+      size: (body['size'] as String?)?.trim(),
+      n: body['n'] is int ? body['n'] as int : 1,
+      seed: body['seed'] is int ? body['seed'] as int : null,
+      refImages: rawRefs is List
+          ? <String>[
+              for (final ref in rawRefs)
+                if (ref is String) ref,
+            ]
+          : const <String>[],
+    );
+    try {
+      validateImageRequest(request);
+    } on PipelineError catch (e) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': e.message,
+      });
+      return;
+    }
+
+    final id = _newRunId('img');
+    _imageJobs[id] = JobRunRecord(id: id);
+    unawaited(_runImage(id, request));
+    _sendJson(req, HttpStatus.accepted, <String, dynamic>{'id': id});
+  }
+
+  Future<void> _runImage(String id, ImageRequest request) async {
+    final record = _imageJobs[id]!;
+    record.logs.add(
+      '开始：模型 ${request.model}，模式 ${request.mode.name}，n=${request.n}',
+    );
+    try {
+      final runner = imageRunner ?? _defaultImageRunner;
+      final job = await runner(
+        request: request,
+        contentId: id,
+        onProgress: record.logs.add,
+      );
+      record.status = 'completed';
+      record.cost = job.cost;
+      record.imagePaths.addAll(job.images.where((i) => i.ok).map((i) => i.path));
+      record.logs.add('完成：${job.images.where((i) => i.ok).length} 张');
+    } on PipelineError catch (e) {
+      record.status = 'failed';
+      record.error = e.message;
+      record.logs.add('失败：${e.message}');
+    } on ConfigException catch (e) {
+      record.status = 'failed';
+      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+          '（${e.message}）';
+      record.logs.add('失败：${record.error}');
+    } catch (e) {
+      record.status = 'failed';
+      record.error = '$e';
+      record.logs.add('失败：$e');
+    }
+  }
+
+  Future<ImageJob> _defaultImageRunner({
+    required ImageRequest request,
+    required String contentId,
+    required void Function(String message) onProgress,
+  }) {
+    final client = buildImageClient(
+      request: request,
+      apiKey: cfg.requireApiKey(),
+      host: cfg.apiHost,
+    );
+    final model = findImageModel(request.model)!;
+    final prices = resolvePrices(
+      defaults: model.defaultPrices,
+      overrides: cfg.imagePrices,
+      model: model.id,
+    );
+    return generateImages(
+      client: client,
+      request: request,
+      baseDir: imagesOutputDir ?? _defaultImagesDir(),
+      contentId: contentId,
+      unitPrice: unitPrice(prices: prices, tier: priceTierFor(request.size)),
+      pollSeconds: cfg.imagePollSeconds,
+      maxWaitMinutes: cfg.imageMaxWaitMinutes,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<void> _getImage(HttpRequest req) async {
+    final id = req.uri.pathSegments[2];
+    final record = _imageJobs[id];
+    if (record == null) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'job not found',
+      });
+      return;
+    }
+    _sendJson(req, HttpStatus.ok, <String, dynamic>{
+      'id': record.id,
+      'status': record.status,
+      'logs': record.logs,
+      'cost': record.cost,
+      'results': <Map<String, Object?>>[
+        for (var i = 0; i < record.imagePaths.length; i++)
+          <String, Object?>{'index': i + 1, 'path': record.imagePaths[i]},
+      ],
+      if (record.error != null) 'error': record.error,
+    });
+  }
+
+  Future<void> _getImageFile(HttpRequest req) async {
+    final id = req.uri.pathSegments[2];
+    final index = int.tryParse(req.uri.pathSegments[3]);
+    final record = _imageJobs[id];
+    if (record == null) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'job not found',
+      });
+      return;
+    }
+    if (index == null ||
+        index < 1 ||
+        index > record.imagePaths.length) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'image not found',
+      });
+      return;
+    }
+    final file = File(record.imagePaths[index - 1]);
+    if (!await file.exists()) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'file not found',
+      });
+      return;
+    }
+    req.response
+      ..statusCode = HttpStatus.ok
+      ..headers.set(HttpHeaders.contentTypeHeader, 'image/png')
+      ..headers.set(
+        'content-disposition',
+        'inline; filename="image-${index.toString().padLeft(2, '0')}.png"',
+      )
+      ..headers.set(HttpHeaders.contentLengthHeader, await file.length());
+    await file.openRead().pipe(req.response);
   }
 
   Future<void> _createT2v(HttpRequest req) async {
@@ -246,7 +512,7 @@ class PipelineServer {
       return;
     }
 
-    final id = _newRunId();
+    final id = _newRunId('run');
     final record = RunRecord(id: id);
     _runs[id] = record;
 
@@ -444,12 +710,20 @@ class PipelineServer {
     }
   }
 
-  String _newRunId() {
+  String _newRunId(String prefix) {
     final now = DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');
-    return 'run-${now.year}${two(now.month)}${two(now.day)}-'
+    return '$prefix-${now.year}${two(now.month)}${two(now.day)}-'
         '${two(now.hour)}${two(now.minute)}${two(now.second)}-'
         '${now.millisecond.toString().padLeft(3, '0')}';
+  }
+
+  /// `t2i` / `i2i` / `series` → enum, or null when the name is unknown.
+  ImageMode? _imageMode(String name) {
+    for (final mode in ImageMode.values) {
+      if (mode.name == name) return mode;
+    }
+    return null;
   }
 
   void _sendJson(HttpRequest req, int status, Map<String, dynamic> body) {
