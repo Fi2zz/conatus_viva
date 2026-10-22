@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import CostGate from './CostGate'
 import { estimateImageCost, unitPrice } from './imageCost'
 import { useJob, type JobBase } from './useJob'
@@ -34,6 +34,7 @@ const MODE_LABELS: Record<ImageModeName, string> = {
 }
 
 const MAX_REF_BYTES = 10 * 1024 * 1024
+const ACCEPTED_REF_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 function imageJobUrl(id: string): string {
   return `/api/images/${id}`
@@ -62,6 +63,7 @@ export default function ImageStudio() {
   const [n, setN] = useState(1)
   const [seed, setSeed] = useState('')
   const [refs, setRefs] = useState<RefImage[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
@@ -109,8 +111,8 @@ export default function ImageStudio() {
     setFormError('')
     const next: RefImage[] = []
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) {
-        setFormError(`${file.name} 不是图片文件`)
+      if (!ACCEPTED_REF_TYPES.includes(file.type)) {
+        setFormError(`${file.name} 仅支持 PNG / JPEG / WebP`)
         return
       }
       if (file.size > MAX_REF_BYTES) {
@@ -275,34 +277,48 @@ export default function ImageStudio() {
           {mode !== 't2i' && (model?.max_ref_images ?? 0) > 0 && (
             <div className="field">
               <label>
-                参考图 <span className="value">（最多 {model?.max_ref_images} 张，单张 ≤10MB）</span>
+                参考图{' '}
+                <span className="value">
+                  （已选 {refs.length}/{model?.max_ref_images}，单张 ≤10MB）
+                </span>
               </label>
+              <div className="ref-grid">
+                {refs.map((ref, i) => (
+                  <div className="ref-tile" key={`${ref.name}-${i}`}>
+                    <img src={ref.dataUrl} alt={ref.name} title={ref.name} />
+                    <button
+                      type="button"
+                      className="ref-remove"
+                      aria-label={`移除 ${ref.name}`}
+                      onClick={() => setRefs(refs.filter((_, idx) => idx !== i))}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {refs.length < (model?.max_ref_images ?? 0) && (
+                  <button
+                    type="button"
+                    className="ref-add"
+                    aria-label="添加参考图"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <span>+</span>
+                    <small>添加</small>
+                  </button>
+                )}
+              </div>
               <input
+                ref={fileInputRef}
+                className="ref-input"
                 type="file"
-                accept="image/*"
+                accept={ACCEPTED_REF_TYPES.join(',')}
                 multiple
                 onChange={(e) => {
                   void addRefs(e.target.files)
                   e.target.value = ''
                 }}
               />
-              {refs.length > 0 && (
-                <ul className="ref-list">
-                  {refs.map((ref, i) => (
-                    <li key={`${ref.name}-${i}`}>
-                      <img src={ref.dataUrl} alt={ref.name} />
-                      <span>{ref.name}</span>
-                      <button
-                        type="button"
-                        className="btn-ghost"
-                        onClick={() => setRefs(refs.filter((_, idx) => idx !== i))}
-                      >
-                        移除
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           )}
 
