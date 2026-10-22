@@ -34,6 +34,24 @@
     "endpoint": "",
     "prefix": "pipeline-exp/"
   },
+  "image": {
+    "poll_seconds": 5,
+    "max_wait_minutes": 10,
+    "default_model": "qwen-image-3.0-pro"
+  },
+  "pricing": {
+    "image": {
+      "qwen-image-3.0-pro": { "1K": 0.35, "2K": 0.5 },
+      "qwen-image-3.0": { "1K": 0.2, "2K": 0.3 },
+      "wan2.7-image-pro": { "1K": 0.35, "2K": 0.5, "4K": 1.0 },
+      "wan2.7-image": { "1K": 0.2, "2K": 0.3 },
+      "z-image-turbo": { "2K": 0.1 }
+    },
+    "video": {
+      "wan3.0-video": { "480P": 0.21, "720P": 0.42, "1080P": 0.84 },
+      "wan3.0-video-prime": { "480P": 0.45, "720P": 0.9, "1080P": 1.8 }
+    }
+  },
   "video": {
     "target_count": 4,
     "min_clip_s": 2,

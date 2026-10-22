@@ -114,4 +114,41 @@ void main() {
       throwsA(isA<ConfigException>()),
     );
   });
+
+  test('image section defaults', () async {
+    final c = await PipelineConfig.load(file: await writeConfig(tmp, '{}'), env: {});
+    expect(c.imagePollSeconds, 5);
+    expect(c.imageMaxWaitMinutes, 10);
+    expect(c.imageDefaultModel, 'qwen-image-3.0-pro');
+    expect(c.imagePrices, isEmpty);
+    expect(c.videoPrices, isEmpty);
+  });
+
+  test('pricing tables parse model → tier → price', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(
+        tmp,
+        '{"image": {"poll_seconds": 3, "default_model": "wan2.7-image"},'
+        ' "pricing": {"image": {"wan2.7-image-pro": {"2K": 0.5, "4K": 1.0}},'
+        ' "video": {"wan3.0-video": {"720P": 0.42}}}}',
+      ),
+      env: {},
+    );
+    expect(c.imagePollSeconds, 3);
+    expect(c.imageDefaultModel, 'wan2.7-image');
+    expect(c.imagePrices['wan2.7-image-pro'], {'2K': 0.5, '4K': 1.0});
+    expect(c.videoPrices['wan3.0-video'], {'720P': 0.42});
+  });
+
+  test('malformed pricing values are ignored', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(
+        tmp,
+        '{"pricing": {"image": {"x": {"2K": "free", "1K": 0.2}}, "video": []}}',
+      ),
+      env: {},
+    );
+    expect(c.imagePrices['x'], {'1K': 0.2});
+    expect(c.videoPrices, isEmpty);
+  });
 }

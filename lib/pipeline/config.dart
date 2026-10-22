@@ -46,6 +46,11 @@ class PipelineConfig {
     this.t2vPollSeconds = 15,
     this.t2vMaxWaitMinutes = 10,
     this.t2vYuanPerSecond = 0.42,
+    this.imagePollSeconds = 5,
+    this.imageMaxWaitMinutes = 10,
+    this.imageDefaultModel = 'qwen-image-3.0-pro',
+    this.imagePrices = const <String, Map<String, double>>{},
+    this.videoPrices = const <String, Map<String, double>>{},
     this.workspaceId = '',
     this.baseUrl = defaultBaseUrl,
     Map<String, String>? env,
@@ -87,6 +92,7 @@ class PipelineConfig {
     final tts = _section(json, 'tts');
     final i2v = _section(json, 'i2v');
     final t2v = _section(json, 't2v');
+    final image = _section(json, 'image');
     final oss = _section(json, 'oss');
     final video = _section(json, 'video');
     final workspaceId = _string(json, 'workspace_id', '');
@@ -120,6 +126,11 @@ class PipelineConfig {
       t2vPollSeconds: _int(t2v, 'poll_seconds', 15),
       t2vMaxWaitMinutes: _int(t2v, 'max_wait_minutes', 10),
       t2vYuanPerSecond: _double(t2v, 'yuan_per_second', 0.42),
+      imagePollSeconds: _int(image, 'poll_seconds', 5),
+      imageMaxWaitMinutes: _int(image, 'max_wait_minutes', 10),
+      imageDefaultModel: _string(image, 'default_model', 'qwen-image-3.0-pro'),
+      imagePrices: _priceTable(json, 'image'),
+      videoPrices: _priceTable(json, 'video'),
       ossBucket: _string(oss, 'bucket', ''),
       ossEndpoint: _string(oss, 'endpoint', ''),
       ossPrefix: _string(oss, 'prefix', 'pipeline-exp/'),
@@ -168,6 +179,17 @@ class PipelineConfig {
   /// `docs/万相视频生成与编辑成本核算_v1.0.md`。
   final double t2vYuanPerSecond;
 
+  /// 图片合成任务参数：轮询间隔、超时与默认模型。
+  final int imagePollSeconds;
+  final int imageMaxWaitMinutes;
+  final String imageDefaultModel;
+
+  /// `pricing.image.<model>.<tier> = 元/张`（空 = 全部用目录默认价）。
+  final Map<String, Map<String, double>> imagePrices;
+
+  /// `pricing.video.<model>.<分辨率> = 元/秒`（空 = 全部用目录默认价）。
+  final Map<String, Map<String, double>> videoPrices;
+
   final String baseUrl;
 
   /// 百炼业务空间 ID（空 = 默认空间，走 [defaultApiHost]）。配置后所有
@@ -200,6 +222,26 @@ class PipelineConfig {
   static Map<String, dynamic> _section(Map<String, dynamic> json, String key) {
     final value = json[key];
     return value is Map<String, dynamic> ? value : const <String, dynamic>{};
+  }
+
+  /// `pricing.<section>.<model>.<tier> = 元`；非数字或非对象条目跳过。
+  static Map<String, Map<String, double>> _priceTable(
+    Map<String, dynamic> json,
+    String section,
+  ) {
+    final root = _section(json, 'pricing');
+    final table = _section(root, section);
+    final out = <String, Map<String, double>>{};
+    for (final entry in table.entries) {
+      final tiers = entry.value;
+      if (tiers is! Map<String, dynamic>) continue;
+      final prices = <String, double>{
+        for (final t in tiers.entries)
+          if (t.value is num) t.key: (t.value as num).toDouble(),
+      };
+      if (prices.isNotEmpty) out[entry.key] = prices;
+    }
+    return out;
   }
 
   static String _string(Map<String, dynamic> map, String key, String fallback) {
