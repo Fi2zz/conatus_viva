@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_wanxiang/pipeline/bailian/image_client.dart';
 import 'package:flutter_wanxiang/pipeline/config.dart';
+import 'package:flutter_wanxiang/pipeline/generation_models.dart';
 import 'package:flutter_wanxiang/pipeline/image_generation.dart';
 import 'package:flutter_wanxiang/server/pipeline_server.dart';
 import 'package:test/test.dart';
@@ -292,5 +293,89 @@ void main() {
       404,
     );
     expect((await _get(server.boundPort!, '/api/images/$id/2')).status, 200);
+  });
+
+  test('POST /api/images with items runs one task per item', () async {
+    await server.stop();
+    final batch = PipelineServer(
+      cfg: _cfg,
+      staticDir: staticDir,
+      port: 0,
+      imagesOutputDir: outDir.path,
+      imageEditRunner:
+          ({
+            required ImageEditBatch batch,
+            required String contentId,
+            required void Function(String) onProgress,
+          }) async {
+            Directory('${outDir.path}/$contentId').createSync(recursive: true);
+            final results = <ImageJobImage>[];
+            for (var i = 0; i < batch.items.length; i++) {
+              final path =
+                  '${outDir.path}/$contentId/image-0${i + 1}.png';
+              if (i == 0) {
+                File(path).writeAsBytesSync(<int>[1]);
+                results.add(ImageJobImage(index: i + 1, path: path, ok: true));
+              } else {
+                results.add(
+                  ImageJobImage(
+                    index: i + 1,
+                    path: '',
+                    ok: false,
+                    error: 'provider exploded',
+                  ),
+                );
+              }
+            }
+            onProgress('fake batch');
+            return ImageJob(
+              id: contentId,
+              model: batch.model,
+              mode: ImageMode.i2i,
+              n: batch.items.length,
+              images: results,
+              cost: 0.5,
+            );
+          },
+    );
+    await batch.start();
+    server = batch;
+
+    final created = await _postJson(server.boundPort!, '/api/images', {
+      'model': 'qwen-image-3.0-pro',
+      'mode': 'i2i',
+      'items': [
+        {'prompt': '第一张', 'image': 'data:image/png;base64,AAA'},
+        {'prompt': '第二张', 'image': 'data:image/png;base64,BBB'},
+      ],
+    });
+    expect(created.status, 202);
+    final id =
+        (jsonDecode(created.body) as Map<String, dynamic>)['id'] as String;
+
+    var body = <String, dynamic>{};
+    for (var i = 0; i < 50; i++) {
+      body =
+          jsonDecode((await _get(server.boundPort!, '/api/images/$id')).body)
+              as Map<String, dynamic>;
+      if (body['status'] != 'running') break;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    final results = body['results'] as List<dynamic>;
+    expect(results.length, 2);
+    expect(results.first['ok'], isTrue);
+    expect(results.last['ok'], isFalse);
+    expect(body['cost'], 0.5);
+  });
+
+  test('batch item without an image is 400', () async {
+    final res = await _postJson(server.boundPort!, '/api/images', {
+      'model': 'qwen-image-3.0-pro',
+      'mode': 'i2i',
+      'items': [
+        {'prompt': '缺少图片'},
+      ],
+    });
+    expect(res.status, 400);
   });
 }

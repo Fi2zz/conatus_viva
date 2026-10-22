@@ -553,3 +553,48 @@ button.btn {
   cursor: pointer;
   font-family: inherit;
 }
+
+.edit-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.edit-item {
+  border: 1px solid #e5e5ea;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fcfcfd;
+}
+
+.edit-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6e6e73;
+}
+
+.edit-item-head .btn-ghost {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.edit-item .field:last-child {
+  margin-bottom: 0;
+}
+
+.add-item {
+  width: 100%;
+  padding: 10px;
+  border-style: dashed;
+  color: #0071e3;
+}
+
+.add-item:disabled {
+  color: #8e8e93;
+  cursor: not-allowed;
+}

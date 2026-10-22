@@ -64,6 +64,42 @@ class _FailingDownloadClient extends _FakeClient {
   }
 }
 
+
+class _BatchClient implements ImageGenClient {
+  _BatchClient({this.failAt = -1});
+  final int failAt;
+  int submits = 0;
+
+  @override
+  Future<ImageTask> submit(ImageRequest request) async {
+    final n = submits++;
+    if (n == failAt) {
+      throw const PipelineError(ErrorClass.fatal, 'provider exploded');
+    }
+    return ImageTask(
+      taskId: 't$n',
+      status: ImageTaskStatus.running,
+      imageUrls: const [],
+    );
+  }
+
+  @override
+  Future<ImageTask> poll(String taskId) async => ImageTask(
+    taskId: taskId,
+    status: ImageTaskStatus.succeeded,
+    imageUrls: [Uri.parse('https://x/$taskId.png')],
+  );
+
+  @override
+  Future<List<int>> download(Uri url) async => [1, 2, 3];
+}
+
+ImageEditItem _item(String prompt) => ImageEditItem(
+  prompt: prompt,
+  image: 'data:image/png;base64,AAA',
+  refs: const ['data:image/jpeg;base64,BBB'],
+);
+
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('conatus_img_test'));
@@ -223,6 +259,67 @@ void main() {
       ),
     );
     expect(Directory(dir).existsSync(), isFalse);
+  });
+
+  test('batch edits generate one image per item and charge each', () async {
+    final job = await generateImageEdits(
+      client: _BatchClient(),
+      model: 'qwen-image-3.0-pro',
+      family: ImageFamily.qwen3,
+      items: [_item('第一张'), _item('第二张')],
+      baseDir: tmp.path,
+      contentId: 'b1',
+      unitPrice: 0.5,
+      sleep: (_) async {},
+    );
+    expect(job.cost, 1.0);
+    expect(job.images.map((i) => i.ok), [true, true]);
+    expect(File('${tmp.path}/b1/image-01.png').existsSync(), isTrue);
+    expect(File('${tmp.path}/b1/image-02.png').existsSync(), isTrue);
+  });
+
+  test('a failed batch item is reported and does not stop the rest', () async {
+    final job = await generateImageEdits(
+      client: _BatchClient(failAt: 1),
+      model: 'qwen-image-3.0-pro',
+      family: ImageFamily.qwen3,
+      items: [_item('第一张'), _item('第二张'), _item('第三张')],
+      baseDir: tmp.path,
+      contentId: 'b2',
+      unitPrice: 0.5,
+      sleep: (_) async {},
+    );
+    expect(job.cost, 1.0);
+    expect(job.images.map((i) => i.ok), [true, false, true]);
+    expect(job.images[1].error, isNotNull);
+  });
+
+  test('batch validation rejects empty prompts and oversized refs', () {
+    expect(
+      () => validateImageEditItem(_item('  '), findImageModel('qwen-image-3.0-pro')!),
+      throwsA(isA<PipelineError>()),
+    );
+    expect(
+      () => validateImageEditItem(
+        const ImageEditItem(
+          prompt: 'x',
+          image: 'not-a-data-url',
+        ),
+        findImageModel('qwen-image-3.0-pro')!,
+      ),
+      throwsA(isA<PipelineError>()),
+    );
+    expect(
+      () => validateImageEditItem(
+        ImageEditItem(
+          prompt: 'x',
+          image: 'data:image/png;base64,AAA',
+          refs: List.filled(3, 'data:image/png;base64,BBB'),
+        ),
+        findImageModel('qwen-image-3.0-pro')!,
+      ),
+      throwsA(isA<PipelineError>()),
+    );
   });
 }
 

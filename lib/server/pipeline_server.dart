@@ -153,6 +153,14 @@ typedef ImageRunner =
       required void Function(String message) onProgress,
     });
 
+/// Runs one image-edit batch; tests inject a fake to stay offline.
+typedef ImageEditRunner =
+    Future<ImageJob> Function({
+      required ImageEditBatch batch,
+      required String contentId,
+      required void Function(String message) onProgress,
+    });
+
 /// Runs one generic text-to-video task (no speaker overlay); tests inject a fake.
 typedef TextToVideoRunner =
     Future<TextToVideoResult> Function({
@@ -178,6 +186,7 @@ class PipelineServer {
     this.port = 18080,
     this.speakerRunner,
     this.imageRunner,
+    this.imageEditRunner,
     this.videoRunner,
     this.avatarImage,
     this.outputDir,
@@ -196,6 +205,9 @@ class PipelineServer {
 
   /// Test seam: when set, replaces the real image generation.
   final ImageRunner? imageRunner;
+
+  /// Test seam: when set, replaces the real image-edit batch.
+  final ImageEditRunner? imageEditRunner;
 
   /// Test seam: when set, replaces the real text-to-video generation.
   final TextToVideoRunner? videoRunner;
@@ -376,6 +388,64 @@ class PipelineServer {
       return;
     }
 
+    final rawItems = body['items'];
+    if (rawItems is List) {
+      if (mode != ImageMode.i2i) {
+        _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+          'error': '包含 items 时 mode 必须是 i2i',
+        });
+        return;
+      }
+      if (rawItems.length > 20) {
+        _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+          'error': '单次最多 20 条编辑任务',
+        });
+        return;
+      }
+      final items = <ImageEditItem>[];
+      for (final raw in rawItems) {
+        if (raw is! Map) {
+          _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+            'error': 'items 条目格式错误',
+          });
+          return;
+        }
+        final refs = raw['refs'];
+        items.add(
+          ImageEditItem(
+            prompt: (raw['prompt'] as String?)?.trim() ?? '',
+            image: (raw['image'] as String?) ?? '',
+            refs: refs is List
+                ? <String>[
+                    for (final ref in refs)
+                      if (ref is String) ref,
+                  ]
+                : const <String>[],
+          ),
+        );
+      }
+      final batch = ImageEditBatch(
+        model: model.id,
+        family: model.family,
+        items: items,
+        size: (body['size'] as String?)?.trim(),
+        seed: body['seed'] is int ? body['seed'] as int : null,
+      );
+      try {
+        validateImageBatch(batch);
+      } on PipelineError catch (e) {
+        _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+          'error': e.message,
+        });
+        return;
+      }
+      final id = _newRunId('img');
+      _imageJobs[id] = JobRunRecord(id: id);
+      unawaited(_runImageEdits(id, batch));
+      _sendJson(req, HttpStatus.accepted, <String, dynamic>{'id': id});
+      return;
+    }
+
     final rawRefs = body['refs'];
     final request = ImageRequest(
       model: model.id,
@@ -470,6 +540,84 @@ class PipelineServer {
       baseDir: imagesOutputDir ?? _defaultImagesDir(),
       contentId: contentId,
       unitPrice: unitPrice(prices: prices, tier: priceTierFor(request.size)),
+      pollSeconds: cfg.imagePollSeconds,
+      maxWaitMinutes: cfg.imageMaxWaitMinutes,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<void> _runImageEdits(String id, ImageEditBatch batch) async {
+    final record = _imageJobs[id]!;
+    record.logs.add(
+      '开始：模型 ${batch.model}，编辑 ${batch.items.length} 条',
+    );
+    try {
+      final runner = imageEditRunner ?? _defaultImageEditRunner;
+      final job = await runner(
+        batch: batch,
+        contentId: id,
+        onProgress: record.logs.add,
+      );
+      record.images.addAll(job.images);
+      record.cost = job.cost;
+      final okCount = job.images.where((i) => i.ok).length;
+      if (okCount == 0) {
+        record.status = 'failed';
+        record.error =
+            '全部编辑任务失败；若控制台显示已生成，请核对后再决定是否重试';
+        record.logs.add('失败：全部条目失败');
+        return;
+      }
+      record.status = 'completed';
+      record.logs.add('完成：$okCount/${batch.items.length} 条');
+    } on PipelineError catch (e) {
+      record.status = 'failed';
+      record.error = e.message;
+      record.logs.add('失败：${e.message}');
+    } on ConfigException catch (e) {
+      record.status = 'failed';
+      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+          '（${e.message}）';
+      record.logs.add('失败：${record.error}');
+    } catch (e) {
+      record.status = 'failed';
+      record.error = '$e';
+      record.logs.add('失败：$e');
+    }
+  }
+
+  Future<ImageJob> _defaultImageEditRunner({
+    required ImageEditBatch batch,
+    required String contentId,
+    required void Function(String message) onProgress,
+  }) {
+    final model = findImageModel(batch.model)!;
+    final client = buildImageClient(
+      request: ImageRequest(
+        model: batch.model,
+        family: batch.family,
+        mode: ImageMode.i2i,
+        prompt: batch.items.first.prompt,
+        n: 1,
+      ),
+      apiKey: cfg.requireApiKey(),
+      host: cfg.apiHost,
+    );
+    final prices = resolvePrices(
+      defaults: model.defaultPrices,
+      overrides: cfg.imagePrices,
+      model: model.id,
+    );
+    return generateImageEdits(
+      client: client,
+      model: batch.model,
+      family: batch.family,
+      items: batch.items,
+      baseDir: imagesOutputDir ?? _defaultImagesDir(),
+      contentId: contentId,
+      unitPrice: unitPrice(prices: prices, tier: priceTierFor(batch.size)),
+      size: batch.size,
+      seed: batch.seed,
       pollSeconds: cfg.imagePollSeconds,
       maxWaitMinutes: cfg.imageMaxWaitMinutes,
       onProgress: onProgress,

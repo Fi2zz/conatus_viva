@@ -39,6 +39,15 @@ interface PickedFile {
   base64: string
 }
 
+interface EditItem {
+  id: string
+  prompt: string
+  image: RefImage | null
+  refs: RefImage[]
+}
+
+type PickTarget = { itemId: string; field: 'image' | 'refs' } | null
+
 declare global {
   interface Window {
     /** Injected by the Flutter shell; absent in a plain browser. */
@@ -55,7 +64,14 @@ const MODE_LABELS: Record<ImageModeName, string> = {
 }
 
 const MAX_REF_BYTES = 10 * 1024 * 1024
+const MAX_EDIT_ITEMS = 20
 const ACCEPTED_REF_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+let itemSeq = 0
+function newEditItem(): EditItem {
+  itemSeq += 1
+  return { id: `item-${itemSeq}`, prompt: '', image: null, refs: [] }
+}
 
 function imageJobUrl(id: string): string {
   return `/api/images/${id}`
@@ -74,6 +90,93 @@ function readAsDataUrl(file: File): Promise<string> {
   })
 }
 
+/** Fails with a message a person can act on, or returns the image. */
+function validatePicked(file: PickedFile): RefImage | string {
+  if (!ACCEPTED_REF_TYPES.includes(file.mime)) {
+    return `${file.name} 仅支持 PNG / JPEG / WebP`
+  }
+  if (Math.ceil((file.base64.length * 3) / 4) > MAX_REF_BYTES) {
+    return `${file.name} 超过 10MB`
+  }
+  return {
+    name: file.name,
+    dataUrl: `data:${file.mime};base64,${file.base64}`,
+  }
+}
+
+function PickedImageGrid({
+  images,
+  max,
+  addLabel,
+  onAdd,
+  onRemove,
+  onPreview,
+  onDropFiles,
+}: {
+  images: RefImage[]
+  max: number
+  addLabel: string
+  onAdd: () => void
+  onRemove: (index: number) => void
+  onPreview: (image: PreviewImage) => void
+  onDropFiles: (files: FileList) => void
+}) {
+  const [dragging, setDragging] = useState(false)
+  const dragDepth = useRef(0)
+
+  return (
+    <div
+      className={dragging ? 'ref-grid dragging' : 'ref-grid'}
+      onDragEnter={(e) => {
+        e.preventDefault()
+        dragDepth.current += 1
+        setDragging(true)
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={() => {
+        dragDepth.current -= 1
+        if (dragDepth.current <= 0) {
+          dragDepth.current = 0
+          setDragging(false)
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        dragDepth.current = 0
+        setDragging(false)
+        onDropFiles(e.dataTransfer.files)
+      }}
+    >
+      {images.map((image, i) => (
+        <div className="ref-tile" key={`${image.name}-${i}`}>
+          <button
+            type="button"
+            className="ref-preview"
+            aria-label={`预览 ${image.name}`}
+            onClick={() => onPreview({ src: image.dataUrl, name: image.name })}
+          >
+            <img src={image.dataUrl} alt={image.name} title={image.name} />
+          </button>
+          <button
+            type="button"
+            className="ref-remove"
+            aria-label={`移除 ${image.name}`}
+            onClick={() => onRemove(i)}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      {images.length < max && (
+        <button type="button" className="ref-add" aria-label={addLabel} onClick={onAdd}>
+          <span>+</span>
+          <small>{addLabel}</small>
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function ImageStudio() {
   const [models, setModels] = useState<ImageModelDto[]>([])
   const [modelId, setModelId] = useState('')
@@ -84,9 +187,9 @@ export default function ImageStudio() {
   const [n, setN] = useState(1)
   const [seed, setSeed] = useState('')
   const [refs, setRefs] = useState<RefImage[]>([])
+  const [editItems, setEditItems] = useState<EditItem[]>(() => [newEditItem()])
+  const [pickTarget, setPickTarget] = useState<PickTarget>(null)
   const [preview, setPreview] = useState<PreviewImage | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const dragDepth = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -123,10 +226,13 @@ export default function ImageStudio() {
   const availableSizes = (model?.sizes ?? []).filter(
     (s) => s !== '4K' || (model?.id.endsWith('-pro') && mode === 't2i'),
   )
-  const estimate = model ? estimateImageCost(model.prices, size || null, n) : 0
-  const price = model ? unitPrice(model.prices, size || null) : 0
+  const unit = model ? unitPrice(model.prices, size || null) : 0
+  const estimate = model
+    ? estimateImageCost(model.prices, size || null, mode === 'i2i' ? editItems.length : n)
+    : 0
   const completed = job?.status === 'completed'
   const polling = job?.status === 'running'
+  const maxItemRefs = Math.max(0, (model?.max_ref_images ?? 1) - 1)
 
   const selectModel = (id: string) => {
     const next = models.find((m) => m.id === id)
@@ -139,53 +245,48 @@ export default function ImageStudio() {
     setConfirming(false)
   }
 
-  const appendRefs = (items: RefImage[]) => {
-    if (!model) return
-    const merged = [...refs, ...items]
-    if (merged.length > model.max_ref_images) {
-      setFormError(`参考图最多 ${model.max_ref_images} 张`)
+  const applyRefs = (target: PickTarget, picked: PickedFile[]) => {
+    setFormError('')
+    const items: RefImage[] = []
+    for (const file of picked) {
+      const result = validatePicked(file)
+      if (typeof result === 'string') {
+        setFormError(result)
+        return
+      }
+      items.push(result)
+    }
+    if (items.length === 0) return
+
+    if (!target) {
+      const max = model?.max_ref_images ?? 0
+      if (refs.length + items.length > max) {
+        setFormError(`参考图最多 ${max} 张`)
+        return
+      }
+      setRefs([...refs, ...items])
       return
     }
-    setRefs(merged)
-  }
 
-  const addRefs = async (files: FileList | null) => {
-    if (!files || !model) return
-    setFormError('')
-    const next: RefImage[] = []
-    for (const file of Array.from(files)) {
-      if (!ACCEPTED_REF_TYPES.includes(file.type)) {
-        setFormError(`${file.name} 仅支持 PNG / JPEG / WebP`)
-        return
-      }
-      if (file.size > MAX_REF_BYTES) {
-        setFormError(`${file.name} 超过 10MB`)
-        return
-      }
-      next.push({ name: file.name, dataUrl: await readAsDataUrl(file) })
+    if (target.field === 'image') {
+      const image = items[0]
+      setEditItems((prev) =>
+        prev.map((item) => (item.id === target.itemId ? { ...item, image } : item)),
+      )
+      return
     }
-    appendRefs(next)
-  }
 
-  const addPickedFiles = (files: PickedFile[]) => {
-    if (!model) return
-    setFormError('')
-    const next: RefImage[] = []
-    for (const file of files) {
-      if (!ACCEPTED_REF_TYPES.includes(file.mime)) {
-        setFormError(`${file.name} 仅支持 PNG / JPEG / WebP`)
-        return
-      }
-      if (Math.ceil((file.base64.length * 3) / 4) > MAX_REF_BYTES) {
-        setFormError(`${file.name} 超过 10MB`)
-        return
-      }
-      next.push({
-        name: file.name,
-        dataUrl: `data:${file.mime};base64,${file.base64}`,
-      })
+    const item = editItems.find((i) => i.id === target.itemId)
+    if (!item) return
+    if (item.refs.length + items.length > maxItemRefs) {
+      setFormError(`每条最多 ${maxItemRefs} 张参考图（被编辑图片占 1 个位置）`)
+      return
     }
-    appendRefs(next)
+    setEditItems((prev) =>
+      prev.map((i) =>
+        i.id === target.itemId ? { ...i, refs: [...i.refs, ...items] } : i,
+      ),
+    )
   }
 
   // WKWebView never opens a file input: the add tile asks the Flutter shell
@@ -196,15 +297,17 @@ export default function ImageStudio() {
         setFormError(`选择图片失败：${error}`)
         return
       }
-      addPickedFiles(files ?? [])
+      applyRefs(pickTarget, files ?? [])
+      setPickTarget(null)
     }
     return () => {
       window.__vivaPickResult = undefined
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, refs])
+  }, [pickTarget, model, refs, editItems])
 
-  const openPicker = () => {
+  const openPicker = (target: PickTarget) => {
+    setPickTarget(target)
     if (window.VivaNative) {
       window.VivaNative.postMessage('pickImages')
       return
@@ -212,14 +315,38 @@ export default function ImageStudio() {
     fileInputRef.current?.click()
   }
 
+  const addFiles = async (target: PickTarget, files: FileList) => {
+    const picked: PickedFile[] = []
+    for (const file of Array.from(files)) {
+      const dataUrl = await readAsDataUrl(file)
+      picked.push({
+        name: file.name,
+        mime: file.type,
+        base64: dataUrl.slice(dataUrl.indexOf(',') + 1),
+      })
+    }
+    applyRefs(target, picked)
+  }
+
+  const updateItem = (id: string, patch: Partial<EditItem>) => {
+    setEditItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!prompt.trim()) {
+    if (mode === 'i2i') {
+      for (const [index, item] of editItems.entries()) {
+        if (!item.prompt.trim()) {
+          setFormError(`第 ${index + 1} 条缺少提示词`)
+          return
+        }
+        if (!item.image) {
+          setFormError(`第 ${index + 1} 条缺少被编辑的图片`)
+          return
+        }
+      }
+    } else if (!prompt.trim()) {
       setFormError('请先输入提示词')
-      return
-    }
-    if (mode === 'i2i' && refs.length === 0) {
-      setFormError('图生图至少需要 1 张参考图')
       return
     }
     setFormError('')
@@ -230,20 +357,35 @@ export default function ImageStudio() {
     if (!model) return
     setConfirming(false)
     setSubmitting(true)
+    const seedValue = seed.trim() ? Number(seed) : undefined
+    const body =
+      mode === 'i2i'
+        ? {
+            model: model.id,
+            mode,
+            size: size || undefined,
+            seed: seedValue,
+            items: editItems.map((item) => ({
+              prompt: item.prompt.trim(),
+              image: item.image!.dataUrl,
+              refs: item.refs.map((r) => r.dataUrl),
+            })),
+          }
+        : {
+            model: model.id,
+            mode,
+            prompt: prompt.trim(),
+            negative_prompt: negative.trim() || undefined,
+            size: size || undefined,
+            n,
+            seed: seedValue,
+            ...(mode === 't2i' ? {} : { refs: refs.map((r) => r.dataUrl) }),
+          }
     try {
       const res = await fetch('/api/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: model.id,
-          mode,
-          prompt: prompt.trim(),
-          negative_prompt: negative.trim() || undefined,
-          size: size || undefined,
-          n,
-          seed: seed.trim() ? Number(seed) : undefined,
-          ...(mode === 't2i' ? {} : { refs: refs.map((r) => r.dataUrl) }),
-        }),
+        body: JSON.stringify(body),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -293,151 +435,212 @@ export default function ImageStudio() {
             </div>
           </div>
 
-          <div className="field">
-            <label>提示词</label>
-            <textarea
-              rows={3}
-              placeholder="例如：冬日北京的都市街景，水墨风格，暖光灯笼"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-            />
-          </div>
+          {mode === 'i2i' ? (
+            <div className="edit-items">
+              {editItems.map((item, index) => (
+                <section className="edit-item" key={item.id}>
+                  <header className="edit-item-head">
+                    <span>第 {index + 1} 条</span>
+                    {editItems.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => setEditItems(editItems.filter((i) => i.id !== item.id))}
+                      >
+                        删除
+                      </button>
+                    )}
+                  </header>
 
-          {model?.supports_negative_prompt && (
-            <div className="field">
-              <label>
-                反向提示词 <span className="value">（可选）</span>
-              </label>
-              <textarea
-                rows={2}
-                placeholder="不希望出现的元素，例如：低清晰度、肢体畸形"
-                value={negative}
-                onChange={(e) => setNegative(e.target.value)}
-              />
+                  <div className="field">
+                    <label>提示词</label>
+                    <textarea
+                      rows={3}
+                      placeholder="描述这一条要改成什么样，例如：把背景换成海边黄昏"
+                      value={item.prompt}
+                      onChange={(e) => updateItem(item.id, { prompt: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>
+                      被编辑的图片 <span className="value">（1 张）</span>
+                    </label>
+                    <PickedImageGrid
+                      images={item.image ? [item.image] : []}
+                      max={1}
+                      addLabel="选择图片"
+                      onAdd={() => openPicker({ itemId: item.id, field: 'image' })}
+                      onRemove={() => updateItem(item.id, { image: null })}
+                      onPreview={setPreview}
+                      onDropFiles={(files) => void addFiles({ itemId: item.id, field: 'image' }, files)}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>
+                      参考图 <span className="value">（可选，最多 {maxItemRefs} 张）</span>
+                    </label>
+                    <PickedImageGrid
+                      images={item.refs}
+                      max={maxItemRefs}
+                      addLabel="添加参考图"
+                      onAdd={() => openPicker({ itemId: item.id, field: 'refs' })}
+                      onRemove={(i) =>
+                        updateItem(item.id, { refs: item.refs.filter((_, idx) => idx !== i) })
+                      }
+                      onPreview={setPreview}
+                      onDropFiles={(files) => void addFiles({ itemId: item.id, field: 'refs' }, files)}
+                    />
+                  </div>
+                </section>
+              ))}
+
+              <button
+                type="button"
+                className="btn-ghost add-item"
+                disabled={editItems.length >= MAX_EDIT_ITEMS}
+                onClick={() => setEditItems([...editItems, newEditItem()])}
+              >
+                ＋ 添加一条（{editItems.length}/{MAX_EDIT_ITEMS}）
+              </button>
             </div>
+          ) : (
+            <>
+              <div className="field">
+                <label>提示词</label>
+                <textarea
+                  rows={3}
+                  placeholder="例如：冬日北京的都市街景，水墨风格，暖光灯笼"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                />
+              </div>
+
+              {model?.supports_negative_prompt && (
+                <div className="field">
+                  <label>
+                    反向提示词 <span className="value">（可选）</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="不希望出现的元素，例如：低清晰度、肢体畸形"
+                    value={negative}
+                    onChange={(e) => setNegative(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="field">
+                <label>尺寸</label>
+                <select value={size} onChange={(e) => setSize(e.target.value)}>
+                  <option value="">自动（由模型推荐）</option>
+                  {availableSizes.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>
+                  张数 <span className="value">{n} 张</span>
+                  {mode === 'series' && <span className="value">（最多 n 张，实际由模型决定）</span>}
+                </label>
+                <input
+                  type="range"
+                  min={1}
+                  max={mode === 'series' ? 12 : (model?.max_images ?? 1)}
+                  step={1}
+                  value={n}
+                  onChange={(e) => setN(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="field">
+                <label>
+                  种子 <span className="value">（可选，可复现）</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="留空由服务端随机"
+                  value={seed}
+                  onChange={(e) => setSeed(e.target.value)}
+                />
+              </div>
+
+              {mode === 'series' && (model?.max_ref_images ?? 0) > 0 && (
+                <div className="field">
+                  <label>
+                    参考图{' '}
+                    <span className="value">
+                      （已选 {refs.length}/{model?.max_ref_images}，单张 ≤10MB）
+                    </span>
+                  </label>
+                  <PickedImageGrid
+                    images={refs}
+                    max={model?.max_ref_images ?? 0}
+                    addLabel="添加 / 拖入"
+                    onAdd={() => openPicker(null)}
+                    onRemove={(i) => setRefs(refs.filter((_, idx) => idx !== i))}
+                    onPreview={setPreview}
+                    onDropFiles={(files) => void addFiles(null, files)}
+                  />
+                  <p className="value ref-hint">点击缩略图可放大预览，支持把图片直接拖进这个区域。</p>
+                </div>
+              )}
+            </>
           )}
 
-          <div className="field">
-            <label>尺寸</label>
-            <select value={size} onChange={(e) => setSize(e.target.value)}>
-              <option value="">自动（由模型推荐）</option>
-              {availableSizes.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
+          {mode === 'i2i' && (
+            <>
+              {model?.supports_negative_prompt && (
+                <div className="field">
+                  <label>
+                    反向提示词 <span className="value">（可选）</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="不希望出现的元素，例如：低清晰度、肢体畸形"
+                    value={negative}
+                    onChange={(e) => setNegative(e.target.value)}
+                  />
+                </div>
+              )}
 
-          <div className="field">
-            <label>
-              张数 <span className="value">{n} 张</span>
-              {mode === 'series' && <span className="value">（最多 n 张，实际由模型决定）</span>}
-            </label>
-            <input
-              type="range"
-              min={1}
-              max={mode === 'series' ? 12 : (model?.max_images ?? 1)}
-              step={1}
-              value={n}
-              onChange={(e) => setN(Number(e.target.value))}
-            />
-          </div>
-
-          <div className="field">
-            <label>
-              种子 <span className="value">（可选，可复现）</span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              placeholder="留空由服务端随机"
-              value={seed}
-              onChange={(e) => setSeed(e.target.value)}
-            />
-          </div>
-
-          {mode !== 't2i' && (model?.max_ref_images ?? 0) > 0 && (
-            <div className="field">
-              <label>
-                参考图{' '}
-                <span className="value">
-                  （已选 {refs.length}/{model?.max_ref_images}，单张 ≤10MB）
-                </span>
-              </label>
-              <div
-                className={dragging ? 'ref-grid dragging' : 'ref-grid'}
-                onDragEnter={(e) => {
-                  e.preventDefault()
-                  dragDepth.current += 1
-                  setDragging(true)
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={() => {
-                  dragDepth.current -= 1
-                  if (dragDepth.current <= 0) {
-                    dragDepth.current = 0
-                    setDragging(false)
-                  }
-                }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  dragDepth.current = 0
-                  setDragging(false)
-                  void addRefs(e.dataTransfer.files)
-                }}
-              >
-                {refs.map((ref, i) => (
-                  <div className="ref-tile" key={`${ref.name}-${i}`}>
-                    <button
-                      type="button"
-                      className="ref-preview"
-                      aria-label={`预览 ${ref.name}`}
-                      onClick={() => setPreview({ src: ref.dataUrl, name: ref.name })}
-                    >
-                      <img src={ref.dataUrl} alt={ref.name} title={ref.name} />
-                    </button>
-                    <button
-                      type="button"
-                      className="ref-remove"
-                      aria-label={`移除 ${ref.name}`}
-                      onClick={() => setRefs(refs.filter((_, idx) => idx !== i))}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                {refs.length < (model?.max_ref_images ?? 0) && (
-                  <button
-                    type="button"
-                    className="ref-add"
-                    aria-label="添加参考图"
-                    onClick={openPicker}
-                  >
-                    <span>+</span>
-                    <small>添加 / 拖入</small>
-                  </button>
-                )}
+              <div className="field">
+                <label>尺寸</label>
+                <select value={size} onChange={(e) => setSize(e.target.value)}>
+                  <option value="">自动（由模型推荐）</option>
+                  {availableSizes.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="value ref-hint">点击缩略图可放大预览，支持把图片直接拖进这个区域。</p>
-              <input
-                ref={fileInputRef}
-                className="ref-input"
-                type="file"
-                accept={ACCEPTED_REF_TYPES.join(',')}
-                multiple
-                onChange={(e) => {
-                  void addRefs(e.target.files)
-                  e.target.value = ''
-                }}
-              />
-            </div>
+
+              <div className="field">
+                <label>
+                  种子 <span className="value">（可选，可复现）</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="留空由服务端随机"
+                  value={seed}
+                  onChange={(e) => setSeed(e.target.value)}
+                />
+              </div>
+            </>
           )}
 
           <div className="estimate">
             预估费用 <strong>¥{estimate.toFixed(2)}</strong>
             <span className="value">
-              （单价 ¥{price.toFixed(2)}/张 × {n} 张，以实际账单为准）
+              （单价 ¥{unit.toFixed(2)}/张 × {mode === 'i2i' ? editItems.length : n} 张，以实际账单为准）
             </span>
           </div>
 
@@ -446,7 +649,7 @@ export default function ImageStudio() {
           {confirming ? (
             <CostGate
               estimate={estimate}
-              detail={`单价 ¥${price.toFixed(2)}/张 × ${n} 张`}
+              detail={`单价 ¥${unit.toFixed(2)}/张 × ${mode === 'i2i' ? editItems.length : n} 张`}
               onCancel={() => setConfirming(false)}
               onConfirm={() => void confirmAndGenerate()}
             />
@@ -455,6 +658,19 @@ export default function ImageStudio() {
               {polling ? '生成中...' : '生成图片'}
             </button>
           )}
+
+          <input
+            ref={fileInputRef}
+            className="ref-input"
+            type="file"
+            accept={ACCEPTED_REF_TYPES.join(',')}
+            multiple={pickTarget?.field === 'refs' || pickTarget === null}
+            onChange={(e) => {
+              if (e.target.files) void addFiles(pickTarget, e.target.files)
+              setPickTarget(null)
+              e.target.value = ''
+            }}
+          />
         </form>
 
         {job && (
@@ -514,7 +730,7 @@ export default function ImageStudio() {
                 ))}
               </div>
               {job.results.some((r) => r.ok === false) && (
-                <div className="error">部分图片下载失败，可重新生成或到百炼控制台下载。</div>
+                <div className="error">部分图片失败，可重新生成或到百炼控制台下载。</div>
               )}
               {typeof job.cost === 'number' && (
                 <p className="value">本次计费 ¥{job.cost.toFixed(2)}（以实际账单为准）</p>
