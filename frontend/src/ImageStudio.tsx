@@ -63,6 +63,9 @@ export default function ImageStudio() {
   const [n, setN] = useState(1)
   const [seed, setSeed] = useState('')
   const [refs, setRefs] = useState<RefImage[]>([])
+  const [preview, setPreview] = useState<RefImage | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const dragDepth = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -85,6 +88,15 @@ export default function ImageStudio() {
 
   const job = useJob<ImageJobDto>(jobId, imageJobUrl)
   const model = models.find((m) => m.id === modelId)
+
+  useEffect(() => {
+    if (!preview) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreview(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [preview])
 
   // wan2.7 pro 的 4K 只在「文生图、非组图」下可用；其余组合提前隐藏，避免确认后 400。
   const availableSizes = (model?.sizes ?? []).filter(
@@ -282,10 +294,38 @@ export default function ImageStudio() {
                   （已选 {refs.length}/{model?.max_ref_images}，单张 ≤10MB）
                 </span>
               </label>
-              <div className="ref-grid">
+              <div
+                className={dragging ? 'ref-grid dragging' : 'ref-grid'}
+                onDragEnter={(e) => {
+                  e.preventDefault()
+                  dragDepth.current += 1
+                  setDragging(true)
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragLeave={() => {
+                  dragDepth.current -= 1
+                  if (dragDepth.current <= 0) {
+                    dragDepth.current = 0
+                    setDragging(false)
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  dragDepth.current = 0
+                  setDragging(false)
+                  void addRefs(e.dataTransfer.files)
+                }}
+              >
                 {refs.map((ref, i) => (
                   <div className="ref-tile" key={`${ref.name}-${i}`}>
-                    <img src={ref.dataUrl} alt={ref.name} title={ref.name} />
+                    <button
+                      type="button"
+                      className="ref-preview"
+                      aria-label={`预览 ${ref.name}`}
+                      onClick={() => setPreview(ref)}
+                    >
+                      <img src={ref.dataUrl} alt={ref.name} title={ref.name} />
+                    </button>
                     <button
                       type="button"
                       className="ref-remove"
@@ -304,10 +344,11 @@ export default function ImageStudio() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <span>+</span>
-                    <small>添加</small>
+                    <small>添加 / 拖入</small>
                   </button>
                 )}
               </div>
+              <p className="value ref-hint">点击缩略图可放大预览，支持把图片直接拖进这个区域。</p>
               <input
                 ref={fileInputRef}
                 className="ref-input"
@@ -399,6 +440,30 @@ export default function ImageStudio() {
           )}
         </div>
       </aside>
+
+      {preview && (
+        <div
+          className="ref-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`预览 ${preview.name}`}
+          onClick={() => setPreview(null)}
+        >
+          <img
+            src={preview.dataUrl}
+            alt={preview.name}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            className="ref-lightbox-close"
+            aria-label="关闭预览"
+            onClick={() => setPreview(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }
