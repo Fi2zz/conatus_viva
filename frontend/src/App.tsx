@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import EditCostEstimator from './EditCostEstimator'
 import ImageStudio from './ImageStudio'
+import TextToVideo from './TextToVideo'
 import './App.css'
 
 interface Dialect {
@@ -32,7 +33,7 @@ const DEFAULT_T2V: T2vConfig = {
 }
 
 function App() {
-  const [mode, setMode] = useState<'image' | 'speaker' | 'edit-cost'>('image')
+  const [mode, setMode] = useState<'image' | 'video' | 'speaker' | 'edit-cost'>('image')
   const [dialects, setDialects] = useState<Dialect[]>([])
   const [t2v, setT2v] = useState<T2vConfig>(DEFAULT_T2V)
   const [duration, setDuration] = useState(5)
@@ -140,6 +141,13 @@ function App() {
         </button>
         <button
           type="button"
+          className={mode === 'video' ? 'tab active' : 'tab'}
+          onClick={() => setMode('video')}
+        >
+          文生视频
+        </button>
+        <button
+          type="button"
           className={mode === 'speaker' ? 'tab active' : 'tab'}
           onClick={() => setMode('speaker')}
         >
@@ -155,6 +163,8 @@ function App() {
       </nav>
 
       {mode === 'image' && <ImageStudio />}
+
+      {mode === 'video' && <TextToVideo />}
 
       {mode === 'speaker' && (
       <div className="layout">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateImageCost, priceTierFor, unitPrice } from './imageCost'
+import { estimateImageCost, priceTierFor, unitPrice, unitPriceForTier } from './imageCost'
 
 describe('priceTierFor', () => {
   it('maps pixel sizes by area', () => {
@@ -25,5 +25,13 @@ describe('unitPrice', () => {
 describe('estimateImageCost', () => {
   it('multiplies unit price by image count', () => {
     expect(estimateImageCost({ '2K': 0.5 }, '2K', 4)).toBe(2)
+  })
+})
+
+describe('unitPriceForTier', () => {
+  it('uses the exact resolution tier and falls back to the cheapest', () => {
+    expect(unitPriceForTier({ '480P': 0.21, '720P': 0.42 }, '720P')).toBe(0.42)
+    expect(unitPriceForTier({ '480P': 0.21, '720P': 0.42 }, '1080P')).toBe(0.21)
+    expect(unitPriceForTier({}, '720P')).toBe(0)
   })
 })

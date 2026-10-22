@@ -25,13 +25,17 @@ export function priceTierFor(size: string | null): '1K' | '2K' | '4K' {
 }
 
 /** 指定档位单价；档位缺失时回落到最便宜档，空表返回 0。 */
-export function unitPrice(prices: PriceTable, size: string | null): number {
-  const tier = priceTierFor(size)
+export function unitPriceForTier(prices: PriceTable, tier: string): number {
   const exact = prices[tier]
   if (typeof exact === 'number') return exact
   const values = Object.values(prices).filter((v) => typeof v === 'number')
   if (values.length === 0) return 0
   return Math.min(...values)
+}
+
+/** 指定尺寸档位（1K/2K/4K 或像素）的单价。 */
+export function unitPrice(prices: PriceTable, size: string | null): number {
+  return unitPriceForTier(prices, priceTierFor(size))
 }
 
 /** 图片预估 = 张数 × 单价。 */
