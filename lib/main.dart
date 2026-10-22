@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -69,6 +70,9 @@ class WebViewPage extends StatefulWidget {
 }
 
 class _WebViewPageState extends State<WebViewPage> {
+  /// Method channel served by `MainFlutterWindow.swift` (NSOpenPanel).
+  static const MethodChannel _filesChannel = MethodChannel('viva/files');
+
   late final WebViewController controller;
   bool _loading = true;
   String? _error;
@@ -79,6 +83,10 @@ class _WebViewPageState extends State<WebViewPage> {
     debugPrint('WebView loading: ${widget.url}');
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'VivaNative',
+        onMessageReceived: _handleNativeMessage,
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
@@ -121,10 +129,32 @@ class _WebViewPageState extends State<WebViewPage> {
       ..loadRequest(Uri.parse(widget.url));
   }
 
+  /// Handles messages from the React page. Currently only `pickImages`:
+  /// WKWebView has no `runOpenPanelWith` implementation in this Flutter
+  /// plugin, so an `<input type="file">` never opens anything. The page asks
+  /// Flutter, Flutter shows NSOpenPanel, and the chosen files go back as
+  /// base64 data through `window.__vivaPickResult`.
+  Future<void> _handleNativeMessage(JavaScriptMessage message) async {
+    if (message.message != 'pickImages') return;
+    try {
+      final items = await _filesChannel.invokeMethod<List<dynamic>>(
+        'pickImages',
+      );
+      final payload = jsonEncode(items ?? const <dynamic>[]);
+      await controller.runJavaScript(
+        'window.__vivaPickResult && window.__vivaPickResult($payload)',
+      );
+    } catch (e) {
+      await controller.runJavaScript(
+        'window.__vivaPickResult && window.__vivaPickResult([], '
+        '${jsonEncode('$e')})',
+      );
+    }
+  }
+
   /// `/api/t2v/<id>/video` is the clip download; other navigations (and the
   /// `<video>` subresource) pass through.
-  bool _isVideoDownload(String url) {
-    final uri = Uri.parse(url);
+  bool _isVideoDownload(String url) {    final uri = Uri.parse(url);
     return uri.path.startsWith('/api/t2v/') && uri.path.endsWith('/video');
   }
 

@@ -33,6 +33,21 @@ interface PreviewImage {
   name: string
 }
 
+interface PickedFile {
+  name: string
+  mime: string
+  base64: string
+}
+
+declare global {
+  interface Window {
+    /** Injected by the Flutter shell; absent in a plain browser. */
+    VivaNative?: { postMessage: (message: string) => void }
+    /** Called by the Flutter shell with files chosen in NSOpenPanel. */
+    __vivaPickResult?: (files: PickedFile[], error?: string) => void
+  }
+}
+
 const MODE_LABELS: Record<ImageModeName, string> = {
   t2i: '文生图',
   i2i: '图生图·编辑',
@@ -124,6 +139,16 @@ export default function ImageStudio() {
     setConfirming(false)
   }
 
+  const appendRefs = (items: RefImage[]) => {
+    if (!model) return
+    const merged = [...refs, ...items]
+    if (merged.length > model.max_ref_images) {
+      setFormError(`参考图最多 ${model.max_ref_images} 张`)
+      return
+    }
+    setRefs(merged)
+  }
+
   const addRefs = async (files: FileList | null) => {
     if (!files || !model) return
     setFormError('')
@@ -139,12 +164,52 @@ export default function ImageStudio() {
       }
       next.push({ name: file.name, dataUrl: await readAsDataUrl(file) })
     }
-    const merged = [...refs, ...next]
-    if (merged.length > model.max_ref_images) {
-      setFormError(`参考图最多 ${model.max_ref_images} 张`)
+    appendRefs(next)
+  }
+
+  const addPickedFiles = (files: PickedFile[]) => {
+    if (!model) return
+    setFormError('')
+    const next: RefImage[] = []
+    for (const file of files) {
+      if (!ACCEPTED_REF_TYPES.includes(file.mime)) {
+        setFormError(`${file.name} 仅支持 PNG / JPEG / WebP`)
+        return
+      }
+      if (Math.ceil((file.base64.length * 3) / 4) > MAX_REF_BYTES) {
+        setFormError(`${file.name} 超过 10MB`)
+        return
+      }
+      next.push({
+        name: file.name,
+        dataUrl: `data:${file.mime};base64,${file.base64}`,
+      })
+    }
+    appendRefs(next)
+  }
+
+  // WKWebView never opens a file input: the add tile asks the Flutter shell
+  // for NSOpenPanel and gets the bytes back here.
+  useEffect(() => {
+    window.__vivaPickResult = (files, error) => {
+      if (error) {
+        setFormError(`选择图片失败：${error}`)
+        return
+      }
+      addPickedFiles(files ?? [])
+    }
+    return () => {
+      window.__vivaPickResult = undefined
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, refs])
+
+  const openPicker = () => {
+    if (window.VivaNative) {
+      window.VivaNative.postMessage('pickImages')
       return
     }
-    setRefs(merged)
+    fileInputRef.current?.click()
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -347,7 +412,7 @@ export default function ImageStudio() {
                     type="button"
                     className="ref-add"
                     aria-label="添加参考图"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={openPicker}
                   >
                     <span>+</span>
                     <small>添加 / 拖入</small>
