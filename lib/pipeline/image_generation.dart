@@ -46,12 +46,40 @@ const List<Duration> _retryDelays = <Duration>[
 ];
 
 /// `data:image/(png|jpeg|webp);base64,<payload>`.
-final RegExp _dataUrl = RegExp(
-  r'^data:image/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=\s]+$',
-);
-
-/// True when [value] is an accepted inline image.
-bool isValidDataUrl(String value) => _dataUrl.hasMatch(value);
+///
+/// Deliberately not a RegExp: the payload can be ~14MB, and the backtracking
+/// `[...]+$` form overflows the stack at that size.
+bool isValidDataUrl(String value) {
+  const prefixes = <String>[
+    'data:image/png;base64,',
+    'data:image/jpeg;base64,',
+    'data:image/jpg;base64,',
+    'data:image/webp;base64,',
+  ];
+  String? payload;
+  for (final prefix in prefixes) {
+    if (value.startsWith(prefix)) {
+      payload = value.substring(prefix.length);
+      break;
+    }
+  }
+  if (payload == null || payload.isEmpty) return false;
+  for (final code in payload.codeUnits) {
+    final ok =
+        (code >= 0x30 && code <= 0x39) || // 0-9
+        (code >= 0x41 && code <= 0x5a) || // A-Z
+        (code >= 0x61 && code <= 0x7a) || // a-z
+        code == 0x2b || // +
+        code == 0x2f || // /
+        code == 0x3d || // =
+        code == 0x20 || // space
+        code == 0x0a || // LF
+        code == 0x0d || // CR
+        code == 0x09; // tab
+    if (!ok) return false;
+  }
+  return true;
+}
 
 /// Rejects a request the catalog cannot serve, before any paid call.
 ///
@@ -179,7 +207,8 @@ Future<ImageJob> generateImages({
     if (clock().isAfter(deadline)) {
       throw PipelineError(
         ErrorClass.fatal,
-        '图片任务 ${terminal.taskId} 超时（$maxWaitMinutes 分钟）',
+        '图片任务 ${terminal.taskId} 超时（$maxWaitMinutes 分钟）；'
+        '任务可能仍在运行，可在百炼控制台核对后再决定是否重试',
       );
     }
     await wait(Duration(seconds: pollSeconds));

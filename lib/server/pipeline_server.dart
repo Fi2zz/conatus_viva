@@ -97,6 +97,10 @@ String _defaultVideosDir() {
 /// 通用文生视频页提供的宽高比；`adaptive` 由模型按提示词决定。
 const List<String> _kxVideoRatios = <String>['adaptive', '16:9', '9:16', '1:1'];
 
+/// 图片请求体上限：wan 2.7 可带 9 张 10MB 参考图，base64 编码后约 120MB，
+/// 这里按 spec 的 40MB 先挡住明显异常的大包。
+const int _maxImageBodyBytes = 40 * 1024 * 1024;
+
 /// Runs one text-to-video generation for [contentId]; the default builds a 万相
 /// 3.0 client from the config, but tests inject a fake to stay offline.
 typedef SpeakerVideoRunner = Future<SpeakerVideoResult> Function({
@@ -127,7 +131,7 @@ class JobRunRecord {
   JobRunRecord({required this.id})
     : status = 'running',
       logs = <String>[],
-      imagePaths = <String>[],
+      images = <ImageJobImage>[],
       cost = 0,
       createdAt = DateTime.now();
 
@@ -135,7 +139,7 @@ class JobRunRecord {
   String status; // running | completed | failed
   final List<String> logs;
   final DateTime createdAt;
-  final List<String> imagePaths;
+  final List<ImageJobImage> images;
   double cost;
   String? filePath;
   String? error;
@@ -341,7 +345,13 @@ class PipelineServer {
       });
       return;
     }
-    final body = await _readJsonBody(req);
+    if (req.contentLength > _maxImageBodyBytes) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': '请求体超过 40MB',
+      });
+      return;
+    }
+    final body = await _readJsonBody(req, maxBytes: _maxImageBodyBytes);
     if (body == null) {
       _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
         'error': 'invalid JSON body',
@@ -410,10 +420,18 @@ class PipelineServer {
         contentId: id,
         onProgress: record.logs.add,
       );
-      record.status = 'completed';
+      record.images.addAll(job.images);
       record.cost = job.cost;
-      record.imagePaths.addAll(job.images.where((i) => i.ok).map((i) => i.path));
-      record.logs.add('完成：${job.images.where((i) => i.ok).length} 张');
+      final okCount = job.images.where((i) => i.ok).length;
+      if (okCount == 0) {
+        record.status = 'failed';
+        record.error =
+            '图片已生成但全部下载失败；任务可能已计费，请到百炼控制台核对后再决定是否重试';
+        record.logs.add('失败：全部图片下载失败');
+        return;
+      }
+      record.status = 'completed';
+      record.logs.add('完成：$okCount 张');
     } on PipelineError catch (e) {
       record.status = 'failed';
       record.error = e.message;
@@ -473,8 +491,13 @@ class PipelineServer {
       'logs': record.logs,
       'cost': record.cost,
       'results': <Map<String, Object?>>[
-        for (var i = 0; i < record.imagePaths.length; i++)
-          <String, Object?>{'index': i + 1, 'path': record.imagePaths[i]},
+        for (final image in record.images)
+          <String, Object?>{
+            'index': image.index,
+            'path': image.path,
+            'ok': image.ok,
+            if (image.error != null) 'error': image.error,
+          },
       ],
       if (record.error != null) 'error': record.error,
     });
@@ -490,15 +513,22 @@ class PipelineServer {
       });
       return;
     }
-    if (index == null ||
-        index < 1 ||
-        index > record.imagePaths.length) {
+    ImageJobImage? image;
+    if (index != null) {
+      for (final candidate in record.images) {
+        if (candidate.index == index && candidate.ok) {
+          image = candidate;
+          break;
+        }
+      }
+    }
+    if (image == null) {
       _sendJson(req, HttpStatus.notFound, <String, dynamic>{
         'error': 'image not found',
       });
       return;
     }
-    final file = File(record.imagePaths[index - 1]);
+    final file = File(image.path);
     if (!await file.exists()) {
       _sendJson(req, HttpStatus.notFound, <String, dynamic>{
         'error': 'file not found',
@@ -900,10 +930,17 @@ class PipelineServer {
     await file.openRead().pipe(req.response);
   }
 
-  Future<Map<String, dynamic>?> _readJsonBody(HttpRequest req) async {
+  Future<Map<String, dynamic>?> _readJsonBody(
+    HttpRequest req, {
+    int? maxBytes,
+  }) async {
     try {
-      final body = await utf8.decoder.bind(req).join();
-      final decoded = jsonDecode(body);
+      final chunks = <int>[];
+      await for (final chunk in req) {
+        chunks.addAll(chunk);
+        if (maxBytes != null && chunks.length > maxBytes) return null;
+      }
+      final decoded = jsonDecode(utf8.decode(chunks));
       return decoded is Map<String, dynamic> ? decoded : null;
     } on Exception {
       return null;

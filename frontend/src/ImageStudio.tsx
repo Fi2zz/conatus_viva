@@ -18,7 +18,7 @@ interface ImageModelDto {
 }
 
 interface ImageJobDto extends JobBase {
-  results?: Array<{ index: number; path: string }>
+  results?: Array<{ index: number; path: string; ok?: boolean; error?: string }>
   cost?: number
 }
 
@@ -84,6 +84,10 @@ export default function ImageStudio() {
   const job = useJob<ImageJobDto>(jobId, imageJobUrl)
   const model = models.find((m) => m.id === modelId)
 
+  // wan2.7 pro 的 4K 只在「文生图、非组图」下可用；其余组合提前隐藏，避免确认后 400。
+  const availableSizes = (model?.sizes ?? []).filter(
+    (s) => s !== '4K' || (model?.id.endsWith('-pro') && mode === 't2i'),
+  )
   const estimate = model ? estimateImageCost(model.prices, size || null, n) : 0
   const price = model ? unitPrice(model.prices, size || null) : 0
   const completed = job?.status === 'completed'
@@ -153,7 +157,7 @@ export default function ImageStudio() {
           size: size || undefined,
           n,
           seed: seed.trim() ? Number(seed) : undefined,
-          refs: refs.map((r) => r.dataUrl),
+          ...(mode === 't2i' ? {} : { refs: refs.map((r) => r.dataUrl) }),
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -194,6 +198,7 @@ export default function ImageStudio() {
                   className={mode === m ? 'tab active' : 'tab'}
                   onClick={() => {
                     setMode(m)
+                    setN((current) => Math.min(current, m === 'series' ? 12 : (model?.max_images ?? 1)))
                     setConfirming(false)
                   }}
                 >
@@ -231,7 +236,7 @@ export default function ImageStudio() {
             <label>尺寸</label>
             <select value={size} onChange={(e) => setSize(e.target.value)}>
               <option value="">自动（由模型推荐）</option>
-              {(model?.sizes ?? []).map((s) => (
+              {availableSizes.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -267,7 +272,7 @@ export default function ImageStudio() {
             />
           </div>
 
-          {(model?.max_ref_images ?? 0) > 0 && (
+          {mode !== 't2i' && (model?.max_ref_images ?? 0) > 0 && (
             <div className="field">
               <label>
                 参考图 <span className="value">（最多 {model?.max_ref_images} 张，单张 ≤10MB）</span>
@@ -343,17 +348,17 @@ export default function ImageStudio() {
       <aside className="col-right">
         <div className="video-card">
           <h2>生成结果</h2>
-          {completed && job?.results?.length ? (
+          {completed && job?.results?.some((r) => r.ok !== false) ? (
             <>
               <div className="image-grid">
-                {job.results.map((r) => (
+                {job.results.filter((r) => r.ok !== false).map((r) => (
                   <a key={r.index} href={imageFileUrl(job.id, r.index)} download>
                     <img src={imageFileUrl(job.id, r.index)} alt={`生成图 ${r.index}`} />
                   </a>
                 ))}
               </div>
               <div className="downloads">
-                {job.results.map((r) => (
+                {job.results.filter((r) => r.ok !== false).map((r) => (
                   <a
                     key={r.index}
                     href={imageFileUrl(job.id, r.index)}
@@ -364,6 +369,9 @@ export default function ImageStudio() {
                   </a>
                 ))}
               </div>
+              {job.results.some((r) => r.ok === false) && (
+                <div className="error">部分图片下载失败，可重新生成或到百炼控制台下载。</div>
+              )}
               {typeof job.cost === 'number' && (
                 <p className="value">本次计费 ¥{job.cost.toFixed(2)}（以实际账单为准）</p>
               )}

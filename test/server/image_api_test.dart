@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -153,6 +154,7 @@ void main() {
     });
     expect(bad.status, 400);
     expect(bad.body, contains('模式'));
+    expect(bad.body, contains('t2i'));
 
     final tooMany = await _postJson(server.boundPort!, '/api/images', {
       'model': 'qwen-image-3.0-pro',
@@ -169,5 +171,126 @@ void main() {
       'prompt': 'x',
     });
     expect(res.status, 400);
+  });
+
+  test('illegal ref and bad size are 400', () async {
+    final badRef = await _postJson(server.boundPort!, '/api/images', {
+      'model': 'qwen-image-3.0-pro',
+      'mode': 'i2i',
+      'prompt': 'x',
+      'n': 1,
+      'refs': ['https://x/a.png'],
+    });
+    expect(badRef.status, 400);
+
+    final badSize = await _postJson(server.boundPort!, '/api/images', {
+      'model': 'qwen-image-3.0-pro',
+      'mode': 't2i',
+      'prompt': 'x',
+      'n': 1,
+      'size': 'abc',
+    });
+    expect(badSize.status, 400);
+  });
+
+  test('oversized body is rejected before reading', () async {
+    final socket = await Socket.connect('127.0.0.1', server.boundPort!);
+    final buffer = StringBuffer();
+    final done = Completer<void>();
+    socket.listen(
+      (data) {
+        buffer.write(utf8.decode(data, allowMalformed: true));
+        if (!done.isCompleted && buffer.toString().contains('40MB')) {
+          done.complete();
+        }
+      },
+      onDone: () {
+        if (!done.isCompleted) done.complete();
+      },
+      onError: (_) {
+        if (!done.isCompleted) done.complete();
+      },
+    );
+    final body = 'x' * (41 * 1024 * 1024);
+    socket.add(
+      utf8.encode(
+        'POST /api/images HTTP/1.1\r\n'
+        'Host: 127.0.0.1\r\n'
+        'Content-Type: application/json\r\n'
+        'Content-Length: ${body.length}\r\n'
+        '\r\n'
+        '$body',
+      ),
+    );
+    unawaited(socket.flush().catchError((_) {}));
+    await done.future.timeout(const Duration(seconds: 10));
+    socket.destroy();
+    expect(buffer.toString(), contains('400'));
+    expect(buffer.toString(), contains('40MB'));
+  });
+
+  test('a failed download is reported and not served', () async {
+    await server.stop();
+    final failing = PipelineServer(
+      cfg: _cfg,
+      staticDir: staticDir,
+      port: 0,
+      imagesOutputDir: outDir.path,
+      imageRunner:
+          ({
+            required ImageRequest request,
+            required String contentId,
+            required void Function(String) onProgress,
+          }) async {
+            final good = '${outDir.path}/$contentId/image-02.png';
+            Directory('${outDir.path}/$contentId').createSync(recursive: true);
+            File(good).writeAsBytesSync(<int>[9]);
+            return ImageJob(
+              id: contentId,
+              model: request.model,
+              mode: request.mode,
+              n: 2,
+              images: <ImageJobImage>[
+                ImageJobImage(
+                  index: 1,
+                  path: '${outDir.path}/$contentId/image-01.png',
+                  ok: false,
+                  error: 'boom',
+                ),
+                ImageJobImage(index: 2, path: good, ok: true),
+              ],
+              cost: 0.5,
+            );
+          },
+    );
+    await failing.start();
+    server = failing;
+
+    final created = await _postJson(server.boundPort!, '/api/images', {
+      'model': 'qwen-image-3.0-pro',
+      'mode': 't2i',
+      'prompt': 'x',
+      'n': 2,
+    });
+    final id =
+        (jsonDecode(created.body) as Map<String, dynamic>)['id'] as String;
+
+    var body = <String, dynamic>{};
+    for (var i = 0; i < 50; i++) {
+      body =
+          jsonDecode((await _get(server.boundPort!, '/api/images/$id')).body)
+              as Map<String, dynamic>;
+      if (body['status'] != 'running') break;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    final results = body['results'] as List<dynamic>;
+    expect(results.length, 2);
+    expect(results.first['ok'], isFalse);
+    expect(results.last['ok'], isTrue);
+    expect(
+      (await _get(server.boundPort!, '/api/images/$id/1')).status,
+      404,
+    );
+    expect((await _get(server.boundPort!, '/api/images/$id/2')).status, 200);
   });
 }

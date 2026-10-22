@@ -209,6 +209,11 @@ export default function TextToVideo() {
             <h2>运行状态</h2>
             <div className={`status ${job.status}`}>{job.status}</div>
             {job.error && <div className="error">错误：{job.error}</div>}
+            {job.status === 'failed' && (
+              <p className="value">
+                超时或失败时任务可能仍在运行，请先到百炼控制台核对，避免重复提交产生二次计费。
+              </p>
+            )}
             <div className="logs">
               {job.logs.map((log, i) => (
                 <div key={i} className="log-line">

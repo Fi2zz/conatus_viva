@@ -115,10 +115,12 @@ void main() {
         mode: ImageMode.t2i,
         prompt: '一只猫',
         n: 1,
+        seed: 7,
         refImages: const [],
       ),
     );
     expect((body['input'] as Map)['prompt'], '一只猫');
+    expect((body['parameters'] as Map)['seed'], 7);
     final task = await client.poll('t1');
     expect(task.status, ImageTaskStatus.succeeded);
     expect(task.imageUrls.single.toString(), 'https://x/1.png');

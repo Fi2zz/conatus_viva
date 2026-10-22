@@ -146,4 +146,101 @@ void main() {
     expect(isValidDataUrl('data:image/png;base64,AAA'), isTrue);
     expect(isValidDataUrl('https://x/a.png'), isFalse);
   });
+
+  test('invalid refs, oversized payloads and bad sizes are rejected locally', () {
+    expect(
+      () => validateImageRequest(
+        _req(refs: const ['https://x/a.png']),
+      ),
+      throwsA(isA<PipelineError>()),
+    );
+    final huge =
+        'data:image/png;base64,${'A' * (10 * 1024 * 1024 * 4 ~/ 3 + 8)}';
+    expect(
+      () => validateImageRequest(_req(refs: [huge])),
+      throwsA(isA<PipelineError>()),
+    );
+    expect(
+      () => validateImageRequest(_req(size: 'abc')),
+      throwsA(isA<PipelineError>()),
+    );
+    expect(
+      () => validateImageRequest(_req(size: '4096*4096')),
+      throwsA(isA<PipelineError>()),
+    );
+    expect(
+      () => validateImageRequest(
+        ImageRequest(
+          model: 'wan2.7-image-pro',
+          family: ImageFamily.wan27,
+          mode: ImageMode.series,
+          prompt: 'x',
+          size: '4K',
+          n: 2,
+          refImages: const [],
+        ),
+      ),
+      throwsA(isA<PipelineError>()),
+    );
+  });
+
+  test('invalid requests never reach the client', () async {
+    final client = _CountingClient();
+    await expectLater(
+      generateImages(
+        client: client,
+        request: _req(size: 'abc'),
+        baseDir: tmp.path,
+        contentId: 'c4',
+        unitPrice: 0.5,
+        sleep: (_) async {},
+      ),
+      throwsA(isA<PipelineError>()),
+    );
+    expect(client.submits, 0);
+  });
+
+  test('timeout fails without writing any file', () async {
+    final dir = '${tmp.path}/c5';
+    var clock = DateTime(2026, 1, 1, 12);
+    await expectLater(
+      generateImages(
+        client: _StuckClient(),
+        request: _req(),
+        baseDir: tmp.path,
+        contentId: 'c5',
+        unitPrice: 0.5,
+        maxWaitMinutes: 1,
+        sleep: (_) async => clock = clock.add(const Duration(seconds: 30)),
+        now: () => clock,
+      ),
+      throwsA(
+        isA<PipelineError>().having(
+          (e) => e.message,
+          'message',
+          contains('控制台'),
+        ),
+      ),
+    );
+    expect(Directory(dir).existsSync(), isFalse);
+  });
+}
+
+class _CountingClient extends _FakeClient {
+  int submits = 0;
+
+  @override
+  Future<ImageTask> submit(ImageRequest request) async {
+    submits++;
+    return super.submit(request);
+  }
+}
+
+class _StuckClient extends _FakeClient {
+  @override
+  Future<ImageTask> poll(String taskId) async => ImageTask(
+    taskId: taskId,
+    status: ImageTaskStatus.running,
+    imageUrls: const [],
+  );
 }

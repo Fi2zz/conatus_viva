@@ -275,6 +275,7 @@ class ZImageClient extends DashScopeImageClient {
       'parameters': <String, dynamic>{
         'size': request.size ?? '2048*2048',
         'n': 1,
+        if (request.seed != null) 'seed': request.seed,
       },
     };
   }
