@@ -11,6 +11,21 @@
 - **conatus 工具**：[conatus](https://github.com/Fi2zz/conatus) 的 `generate_monthly_video`（高风险操作走审批）
 - **Flutter 桌面 app**：「方言配音主讲人」——内嵌 HTTP server + React 前端（WebView 壳），见下文专章
 
+## 常用命令（Makefile）
+
+```bash
+make            # 列出全部命令
+make setup      # 从示例创建 .env / pipeline_config.json（已存在则跳过）
+make deps       # flutter pub get + 前端 npm ci
+make web        # 构建前端到 web_build/
+make run        # 构建前端并启动 macOS 桌面 app
+make test       # analyze + 离线 Dart 测试 + 前端测试/lint
+make clean      # flutter clean + 删除前端 node_modules
+```
+
+`make test-dart` 只跑可离线的 Dart 套件；`test/server/web_build_assets_test.dart`
+依赖本机 Flutter SDK 与 `dart test` 的版本匹配，单独排除。
+
 ## 快速开始
 
 ```bash
