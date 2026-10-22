@@ -9,6 +9,9 @@ enum ApiRoute {
   createImage,
   getImage,
   getImageFile,
+  createVideo,
+  getVideo,
+  getVideoFile,
   unknown,
 }
 
@@ -43,6 +46,15 @@ ApiRoute apiRouteFor(String method, String path) {
   if (path.startsWith('/api/images/') && method == 'GET') {
     if (path.split('/').length == 5) return ApiRoute.getImageFile;
     return ApiRoute.getImage;
+  }
+  if (path == '/api/videos' && method == 'POST') {
+    return ApiRoute.createVideo;
+  }
+  if (path.startsWith('/api/videos/') && method == 'GET') {
+    if (path.endsWith('/video') && path.split('/').length == 5) {
+      return ApiRoute.getVideoFile;
+    }
+    return ApiRoute.getVideo;
   }
   return ApiRoute.unknown;
 }

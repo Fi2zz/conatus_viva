@@ -30,5 +30,15 @@ void main() {
       expect(apiRouteFor('POST', '/api/images/img-1/2'), ApiRoute.unknown);
       expect(apiRouteFor('GET', '/api/models/x'), ApiRoute.unknown);
     });
+
+    test('video routes, file wins over bare id', () {
+      expect(apiRouteFor('POST', '/api/videos'), ApiRoute.createVideo);
+      expect(
+        apiRouteFor('GET', '/api/videos/vid-1/video'),
+        ApiRoute.getVideoFile,
+      );
+      expect(apiRouteFor('GET', '/api/videos/vid-1'), ApiRoute.getVideo);
+      expect(apiRouteFor('POST', '/api/videos/vid-1'), ApiRoute.unknown);
+    });
   });
 }

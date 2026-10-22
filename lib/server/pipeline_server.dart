@@ -11,6 +11,7 @@ import 'package:flutter_wanxiang/pipeline/errors.dart';
 import 'package:flutter_wanxiang/pipeline/generation_models.dart';
 import 'package:flutter_wanxiang/pipeline/image_generation.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
+import 'package:flutter_wanxiang/pipeline/text_to_video.dart';
 import 'package:flutter_wanxiang/server/api_router.dart';
 
 /// One dialect dropdown option.
@@ -84,6 +85,18 @@ String _defaultImagesDir() {
   return '$base/conatus_viva/images';
 }
 
+/// Default generic-video output root (`$HOME/conatus_viva/videos`).
+String _defaultVideosDir() {
+  final home = Platform.environment['HOME'];
+  final base = (home != null && home.isNotEmpty)
+      ? home
+      : Directory.systemTemp.path;
+  return '$base/conatus_viva/videos';
+}
+
+/// 通用文生视频页提供的宽高比；`adaptive` 由模型按提示词决定。
+const List<String> _kxVideoRatios = <String>['adaptive', '16:9', '9:16', '1:1'];
+
 /// Runs one text-to-video generation for [contentId]; the default builds a 万相
 /// 3.0 client from the config, but tests inject a fake to stay offline.
 typedef SpeakerVideoRunner = Future<SpeakerVideoResult> Function({
@@ -136,6 +149,19 @@ typedef ImageRunner =
       required void Function(String message) onProgress,
     });
 
+/// Runs one generic text-to-video task (no speaker overlay); tests inject a fake.
+typedef TextToVideoRunner =
+    Future<TextToVideoResult> Function({
+      required String prompt,
+      required String model,
+      required String resolution,
+      required String ratio,
+      required int durationS,
+      required bool audio,
+      required String contentId,
+      required void Function(String message) onProgress,
+    });
+
 /// HTTP server serving the React UI and the text-to-video API.
 ///
 /// Static files are served from [staticDir] (the React build output). The API
@@ -148,11 +174,14 @@ class PipelineServer {
     this.port = 18080,
     this.speakerRunner,
     this.imageRunner,
+    this.videoRunner,
     this.avatarImage,
     this.outputDir,
     this.imagesOutputDir,
+    this.videosOutputDir,
   }) : _runs = <String, RunRecord>{},
-       _imageJobs = <String, JobRunRecord>{};
+       _imageJobs = <String, JobRunRecord>{},
+       _videoJobs = <String, JobRunRecord>{};
 
   final PipelineConfig cfg;
   final Directory staticDir;
@@ -164,6 +193,9 @@ class PipelineServer {
   /// Test seam: when set, replaces the real image generation.
   final ImageRunner? imageRunner;
 
+  /// Test seam: when set, replaces the real text-to-video generation.
+  final TextToVideoRunner? videoRunner;
+
   /// The cartoon presenter composited into every clip (from the bundled asset).
   final File? avatarImage;
 
@@ -173,8 +205,13 @@ class PipelineServer {
   /// Absolute dir images are written to; null → `$HOME/conatus_viva/images`.
   final String? imagesOutputDir;
 
+  /// Absolute dir generic videos are written to; null →
+  /// `$HOME/conatus_viva/videos`.
+  final String? videosOutputDir;
+
   final Map<String, RunRecord> _runs;
   final Map<String, JobRunRecord> _imageJobs;
+  final Map<String, JobRunRecord> _videoJobs;
 
   HttpServer? _server;
 
@@ -229,6 +266,12 @@ class PipelineServer {
         await _getImage(req);
       case ApiRoute.getImageFile:
         await _getImageFile(req);
+      case ApiRoute.createVideo:
+        await _createVideo(req);
+      case ApiRoute.getVideo:
+        await _getVideo(req);
+      case ApiRoute.getVideoFile:
+        await _getVideoFile(req);
       case ApiRoute.unknown:
         _sendJson(req, HttpStatus.notFound, <String, dynamic>{
           'error': 'not found',
@@ -468,6 +511,218 @@ class PipelineServer {
       ..headers.set(
         'content-disposition',
         'inline; filename="image-${index.toString().padLeft(2, '0')}.png"',
+      )
+      ..headers.set(HttpHeaders.contentLengthHeader, await file.length());
+    await file.openRead().pipe(req.response);
+  }
+
+  Future<void> _createVideo(HttpRequest req) async {
+    if (req.headers.contentType?.mimeType != 'application/json') {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'expected application/json',
+      });
+      return;
+    }
+    final body = await _readJsonBody(req);
+    if (body == null) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'invalid JSON body',
+      });
+      return;
+    }
+
+    final modelId = (body['model'] as String?)?.trim() ?? '';
+    final model = findTextToVideoModel(modelId);
+    if (model == null) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': '未知文生视频模型：$modelId',
+      });
+      return;
+    }
+    final prompt = (body['prompt'] as String?)?.trim() ?? '';
+    if (prompt.isEmpty) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'prompt 不能为空',
+      });
+      return;
+    }
+    final duration = body['duration'];
+    if (duration is! int ||
+        duration < model.durationMin ||
+        duration > model.durationMax) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error':
+            'duration 必须在 ${model.durationMin}..${model.durationMax} 秒',
+      });
+      return;
+    }
+    final resolution =
+        (body['resolution'] as String?)?.trim() ??
+        (model.resolutions.contains('720P')
+            ? '720P'
+            : model.resolutions.first);
+    if (!model.resolutions.contains(resolution)) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'resolution 必须是 ${model.resolutions.join("/")}',
+      });
+      return;
+    }
+    final ratio = (body['ratio'] as String?)?.trim() ?? 'adaptive';
+    if (!_kxVideoRatios.contains(ratio)) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'ratio 必须是 ${_kxVideoRatios.join("/")}',
+      });
+      return;
+    }
+    final audio = body['audio'] is bool ? body['audio'] as bool : true;
+
+    final id = _newRunId('vid');
+    _videoJobs[id] = JobRunRecord(id: id);
+    unawaited(
+      _runVideo(
+        id: id,
+        prompt: prompt,
+        model: model,
+        resolution: resolution,
+        ratio: ratio,
+        durationS: duration,
+        audio: audio,
+      ),
+    );
+    _sendJson(req, HttpStatus.accepted, <String, dynamic>{'id': id});
+  }
+
+  Future<void> _runVideo({
+    required String id,
+    required String prompt,
+    required VideoModel model,
+    required String resolution,
+    required String ratio,
+    required int durationS,
+    required bool audio,
+  }) async {
+    final record = _videoJobs[id]!;
+    record.logs.add(
+      '开始：模型 ${model.id}，$resolution，$durationS 秒，音频=${audio ? '开' : '关'}',
+    );
+    try {
+      final runner = videoRunner ?? _defaultVideoRunner;
+      final result = await runner(
+        prompt: prompt,
+        model: model.id,
+        resolution: resolution,
+        ratio: ratio,
+        durationS: durationS,
+        audio: audio,
+        contentId: id,
+        onProgress: record.logs.add,
+      );
+      record.status = 'completed';
+      record.filePath = result.filePath;
+      final prices = resolvePrices(
+        defaults: model.defaultPrices,
+        overrides: cfg.videoPrices,
+        model: model.id,
+      );
+      record.cost =
+          durationS * unitPrice(prices: prices, tier: resolution);
+      record.logs.add('完成：${result.filePath}');
+    } on PipelineError catch (e) {
+      record.status = 'failed';
+      record.error = e.message;
+      record.logs.add('失败：${e.message}');
+    } on ConfigException catch (e) {
+      record.status = 'failed';
+      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+          '（${e.message}）';
+      record.logs.add('失败：${record.error}');
+    } catch (e) {
+      record.status = 'failed';
+      record.error = '$e';
+      record.logs.add('失败：$e');
+    }
+  }
+
+  Future<TextToVideoResult> _defaultVideoRunner({
+    required String prompt,
+    required String model,
+    required String resolution,
+    required String ratio,
+    required int durationS,
+    required bool audio,
+    required String contentId,
+    required void Function(String message) onProgress,
+  }) {
+    final client = Wan30VideoClient(
+      apiKey: cfg.requireApiKey(),
+      host: cfg.apiHost,
+      model: model,
+      resolution: resolution,
+      ratio: ratio,
+      watermark: cfg.t2vWatermark,
+      seed: cfg.t2vSeed,
+      audio: audio,
+    );
+    return generateTextToVideo(
+      client: client,
+      prompt: prompt,
+      durationS: durationS,
+      outFile:
+          '${videosOutputDir ?? _defaultVideosDir()}/$contentId/video.mp4',
+      pollSeconds: cfg.t2vPollSeconds,
+      maxWaitMinutes: cfg.t2vMaxWaitMinutes,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<void> _getVideo(HttpRequest req) async {
+    final id = req.uri.pathSegments[2];
+    final record = _videoJobs[id];
+    if (record == null) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'job not found',
+      });
+      return;
+    }
+    _sendJson(req, HttpStatus.ok, <String, dynamic>{
+      'id': record.id,
+      'status': record.status,
+      'logs': record.logs,
+      'cost': record.cost,
+      if (record.filePath != null) 'video_path': record.filePath,
+      if (record.error != null) 'error': record.error,
+    });
+  }
+
+  Future<void> _getVideoFile(HttpRequest req) async {
+    final id = req.uri.pathSegments[2];
+    final record = _videoJobs[id];
+    if (record == null) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'job not found',
+      });
+      return;
+    }
+    final path = record.filePath;
+    if (path == null) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'no video yet',
+      });
+      return;
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'file not found',
+      });
+      return;
+    }
+    req.response
+      ..statusCode = HttpStatus.ok
+      ..headers.set(HttpHeaders.contentTypeHeader, 'video/mp4')
+      ..headers.set(
+        'content-disposition',
+        'attachment; filename="video.mp4"',
       )
       ..headers.set(HttpHeaders.contentLengthHeader, await file.length());
     await file.openRead().pipe(req.response);
