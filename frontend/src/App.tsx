@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import EditCostEstimator from './EditCostEstimator'
+import ImageStudio from './ImageStudio'
 import './App.css'
 
 interface Dialect {
@@ -31,7 +32,7 @@ const DEFAULT_T2V: T2vConfig = {
 }
 
 function App() {
-  const [mode, setMode] = useState<'speaker' | 'edit-cost'>('speaker')
+  const [mode, setMode] = useState<'image' | 'speaker' | 'edit-cost'>('image')
   const [dialects, setDialects] = useState<Dialect[]>([])
   const [t2v, setT2v] = useState<T2vConfig>(DEFAULT_T2V)
   const [duration, setDuration] = useState(5)
@@ -125,13 +126,18 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>方言配音主讲人</h1>
-        <p className="subtitle">
-          填主题、选方言、定时长，生成带卡通主讲人（左下角）的方言口播视频
-        </p>
+        <h1>conatus viva 创作台</h1>
+        <p className="subtitle">图片合成、文生视频与方言配音主讲人</p>
       </header>
 
       <nav className="mode-tabs">
+        <button
+          type="button"
+          className={mode === 'image' ? 'tab active' : 'tab'}
+          onClick={() => setMode('image')}
+        >
+          图片合成
+        </button>
         <button
           type="button"
           className={mode === 'speaker' ? 'tab active' : 'tab'}
@@ -148,7 +154,9 @@ function App() {
         </button>
       </nav>
 
-      {mode === 'speaker' ? (
+      {mode === 'image' && <ImageStudio />}
+
+      {mode === 'speaker' && (
       <div className="layout">
         <div className="col-left">
           <form onSubmit={handleSubmit} className="form">
@@ -268,9 +276,9 @@ function App() {
           </div>
         </aside>
       </div>
-      ) : (
-        <EditCostEstimator />
       )}
+
+      {mode === 'edit-cost' && <EditCostEstimator />}
     </div>
   )
 }
