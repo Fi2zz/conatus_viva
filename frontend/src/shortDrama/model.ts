@@ -110,3 +110,10 @@ export function formatYuan(v: number): string {
 export function formatSeconds(v: number): string {
   return `${v.toFixed(1)}s`;
 }
+
+/// 预算百分比：total <= 0 时返回 0，结果夹在 0..100。
+export function budgetPercent(actual: number, total: number): number {
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  if (!Number.isFinite(actual)) return 0;
+  return Math.min(100, Math.max(0, (actual / total) * 100));
+}
