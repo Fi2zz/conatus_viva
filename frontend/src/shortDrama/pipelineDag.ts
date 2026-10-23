@@ -1,9 +1,9 @@
-/// 短剧工作台「画布视图」的静态工序 DAG（设计预览）。
+/// 短剧工作台「画布视图」的工序 DAG（真实 steps 状态）。
 ///
-/// 8 个工序节点与连线取自 `prototype/short-drama-console.html`（不修改原型）。
-/// 画布视图是**设计预览**，只有「分镜」与「画面」两个节点允许从计划单派生
-/// 数字，其余节点一律显示「未接入」，不编造任何运行时状态 / 成本。
-import { formatYuan, type Plan } from "./model";
+/// 布局取自 `prototype/short-drama-console.html`（不修改原型）；节点状态
+/// 只来自 `/api/drama` 返回的 steps，未接入节点显示「未接入」。
+import { STEP_TO_DAG } from "./view";
+import type { StepKey, StepView } from "./types";
 
 export type DagNodeKey =
   | "rip"
@@ -28,7 +28,6 @@ export interface DagEdge {
   to: DagNodeKey;
 }
 
-/// 节点画布宽度 / 高度，用于画布定位与连线锚点（与原型一致）。
 export const DAG_NODE_W = 170;
 export const DAG_NODE_H = 84;
 
@@ -54,20 +53,23 @@ export const DAG_EDGES: DagEdge[] = [
   { from: "edit", to: "pack" },
 ];
 
-/// 每个工序节点的辅助文案。只有「分镜」与「画面」从计划单派生：
-/// - 分镜：`${shots.length} 镜`
-/// - 画面：`${counts.i2v} 镜 i2v · ¥${totals.estimated_yuan}`
-/// 其余一律「未接入」。
-export function dagNodeMeta(key: DagNodeKey, plan: Plan): string {
-  switch (key) {
-    case "board":
-      return `${plan.shots.length} 镜`;
-    case "frame":
-      return `${plan.counts.i2v} 镜 i2v · ${formatYuan(plan.totals.estimated_yuan)}`;
-    default:
-      return "未接入";
-  }
+/// 画布节点 → 工序 key。
+export function dagNodeStep(key: DagNodeKey): StepKey | undefined {
+  return (Object.keys(STEP_TO_DAG) as StepKey[]).find(
+    (step) => STEP_TO_DAG[step] === key,
+  );
 }
 
-/// 画布横幅文案：设计预览，工序状态尚未接入 conatus。
-export const DAG_BANNER = "设计预览 · 工序状态未接入 conatus";
+/// 节点摘要来自真实 step；未接入显示「未接入」。
+export function dagNodeMetaFromStep(
+  key: DagNodeKey,
+  steps: StepView[],
+): string {
+  const stepKey = dagNodeStep(key);
+  if (stepKey === undefined) return "未接入";
+  const step = steps.find((item) => item.key === stepKey);
+  if (step === undefined || !step.wired) return "未接入";
+  return step.summary === "" ? "待处理" : step.summary;
+}
+
+export const DAG_BANNER = "工序状态来自本地 state · 未接入项不显示进度";
