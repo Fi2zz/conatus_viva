@@ -17,10 +17,11 @@ void main() {
     expect(findImageModel('qwen-image-3.0')!.maxRefImages, 3);
   });
 
-  test('video catalog exposes t2v and i2v for the wan3.0 family', () {
+  test('video catalog covers wan3.0 t2v/i2v and the wan2.6 i2v flash', () {
     expect(kVideoModels.map((m) => m.id), [
       'wan3.0-video',
       'wan3.0-video-prime',
+      'wan2.6-i2v-flash',
     ]);
     expect(findVideoModel('wan3.0-video')!.modes, {
       VideoMode.t2v,
@@ -30,7 +31,13 @@ void main() {
       VideoMode.t2v,
       VideoMode.i2v,
     });
-    expect(findVideoModel('wan2.6-i2v-flash'), isNull);
+    final flash = findVideoModel('wan2.6-i2v-flash')!;
+    expect(flash.modes, {VideoMode.i2v});
+    expect(flash.resolutions, ['720P', '1080P']);
+    expect(flash.durationMin, 2);
+    expect(flash.durationMax, 15);
+    expect(flash.supportsAudio, isFalse);
+    expect(flash.defaultPrices, {'720P': 0.15, '1080P': 0.25});
   });
 
   test('priceTierFor maps pixel sizes by area', () {

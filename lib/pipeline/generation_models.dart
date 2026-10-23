@@ -162,7 +162,8 @@ const List<ImageModel> kImageModels = <ImageModel>[
   ),
 ];
 
-/// 通用视频页可选的模型：万相 3.0 全能模型同时支持文生视频与首帧图生视频。
+/// 视频生成模型目录（t2v / i2v）：万相 3.0 全能模型同时支持文生视频与首帧图生视频，
+/// 万相 2.6 Flash 仅支持首帧图生视频。
 const List<VideoModel> kVideoModels = <VideoModel>[
   VideoModel(
     id: 'wan3.0-video',
@@ -191,6 +192,17 @@ const List<VideoModel> kVideoModels = <VideoModel>[
       '720P': 0.9,
       '1080P': 1.8,
     },
+  ),
+  VideoModel(
+    id: 'wan2.6-i2v-flash',
+    label: '万相 2.6 图生视频 Flash',
+    modes: <VideoMode>{VideoMode.i2v},
+    resolutions: <String>['720P', '1080P'],
+    durationMin: 2,
+    durationMax: 15,
+    supportsAudio: false,
+    defaultPrices: <String, double>{'720P': 0.15, '1080P': 0.25},
+    // 本目录项仅登记无声档；有声档（720P 0.3 / 1080P 0.5）暂不收录。
   ),
 ];
 

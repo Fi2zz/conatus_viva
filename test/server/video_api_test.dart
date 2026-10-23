@@ -108,14 +108,21 @@ void main() {
     if (outDir.existsSync()) outDir.deleteSync(recursive: true);
   });
 
-  test('GET /api/models advertises t2v and i2v modes', () async {
+  test('GET /api/models advertises per-model video modes', () async {
     final res = await _get(server.boundPort!, '/api/models');
     expect(res.status, 200);
-    final video = (jsonDecode(res.body) as Map<String, dynamic>)['video'] as List;
+    final video = ((jsonDecode(res.body) as Map<String, dynamic>)['video']
+            as List)
+        .cast<Map<String, dynamic>>();
     expect(video, isNotEmpty);
-    for (final model in video.cast<Map<String, dynamic>>()) {
-      expect(model['modes'], containsAll(<String>['t2v', 'i2v']));
+    for (final model in video) {
+      expect(model['modes'], isNotEmpty);
     }
+    final byId = {for (final model in video) model['id']: model};
+    for (final id in <String>['wan3.0-video', 'wan3.0-video-prime']) {
+      expect(byId[id]!['modes'], containsAll(<String>['t2v', 'i2v']));
+    }
+    expect(byId['wan2.6-i2v-flash']!['modes'], ['i2v']);
   });
 
   test('POST /api/videos then poll and download', () async {
@@ -215,7 +222,7 @@ void main() {
   test('unknown model and out-of-range duration are 400', () async {
     expect(
       (await _postJson(server.boundPort!, '/api/videos', {
-        'model': 'wan2.6-i2v-flash',
+        'model': 'no-such-video-model',
         'prompt': 'x',
         'duration': 5,
       })).status,
