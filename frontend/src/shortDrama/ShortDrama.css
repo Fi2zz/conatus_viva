@@ -1560,3 +1560,96 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 工序内嵌工具辅助 ─────────────────── */
+
+.sd-cast-card {
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+
+.sd-cast-card.sel {
+  border-color: rgba(255, 90, 43, 0.55);
+  background: linear-gradient(180deg, var(--accent-soft), var(--panel-2));
+}
+
+.sd-shot-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.sd-shot-chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 84px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--ink);
+  text-align: left;
+}
+
+.sd-shot-chip b {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.sd-shot-chip span {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.sd-shot-chip small {
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.sd-shot-chip.sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(255, 90, 43, 0.25) inset;
+}
+
+.sd-line-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-line-list li {
+  display: grid;
+  grid-template-columns: 60px 80px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sd-line-list li span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sd-line-list li p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.sd-embed .layout {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 1100px) {
+  .sd-embed .layout {
+    grid-template-columns: 1fr;
+  }
+}

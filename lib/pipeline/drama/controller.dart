@@ -273,10 +273,14 @@ class DramaController {
     if (body == null) return;
     final series = store.readSeries(seriesId);
     final existing = store.listEpisodes(seriesId);
-    var number = optionalJsonInt(body['number'], 'number') ?? existing.length + 1;
+    final number = _bodyModel(
+      () => optionalJsonInt(body['number'], 'number') ?? existing.length + 1,
+    );
     if (number <= 0) throw const FormatException('number 必须 > 0');
-    var episodeId = optionalJsonString(body['episode_id'], 'episode_id') ??
-        'ep${number.toString().padLeft(2, '0')}';
+    final episodeId = _bodyModel(
+      () => optionalJsonString(body['episode_id'], 'episode_id') ??
+          'ep${number.toString().padLeft(2, '0')}',
+    );
     if (!isDramaId(episodeId)) {
       throw const FormatException('episode_id 非法');
     }
@@ -383,10 +387,12 @@ class DramaController {
   ) async {
     final body = await _bodyOrError(req);
     if (body == null) return;
-    final targets = <String>{
-      for (final raw in asJsonList(body['targets'], 'targets'))
-        requireJsonString(raw, 'targets[]'),
-    };
+    final targets = _bodyModel(
+      () => <String>{
+        for (final raw in asJsonList(body['targets'], 'targets'))
+          requireJsonString(raw, 'targets[]'),
+      },
+    );
     final series = store.readSeries(seriesId);
     final episode = store.readEpisode(seriesId, episodeId);
     final estimate = estimateDrama(
@@ -410,7 +416,9 @@ class DramaController {
     if (req.contentLength != 0 && body == null) return;
     final series = store.readSeries(seriesId);
     final stored = store.readEpisode(seriesId, episodeId);
-    final text = body == null ? null : optionalJsonString(body['text'], 'text');
+    final text = body == null
+        ? null
+        : _bodyModel(() => optionalJsonString(body['text'], 'text'));
     final episode = text == null
         ? stored
         : stored.copyWith(

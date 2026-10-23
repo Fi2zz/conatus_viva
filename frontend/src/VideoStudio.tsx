@@ -38,15 +38,25 @@ function videoJobUrl(id: string): string {
   return `/api/videos/${id}`
 }
 
+interface VideoStudioProps {
+  mode: VideoMode
+  initialPrompt?: string
+  contextLabel?: string
+}
+
 /**
  * 通用视频生成页。`t2v` 是纯提示词文生视频，`i2v` 以一张首帧图片 +
  * 可选运动提示词生成；两者共用任务轮询、计费口径与成片预览。
  */
-export default function VideoStudio({ mode }: { mode: VideoMode }) {
+export default function VideoStudio({
+  mode,
+  initialPrompt = '',
+  contextLabel,
+}: VideoStudioProps) {
   const imageToVideo = mode === 'i2v'
   const [models, setModels] = useState<VideoModelDto[]>([])
   const [modelId, setModelId] = useState('')
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt)
   const [firstFrame, setFirstFrame] = useState<RefImage | null>(null)
   const [preview, setPreview] = useState<PreviewImage | null>(null)
   const [resolution, setResolution] = useState('720P')
@@ -162,6 +172,9 @@ export default function VideoStudio({ mode }: { mode: VideoMode }) {
     <div className="layout">
       <div className="col-left">
         <form onSubmit={handleSubmit} className="form">
+          {contextLabel !== undefined && contextLabel !== '' && (
+            <p className="value">{contextLabel}</p>
+          )}
           <div className="field">
             <label>模型</label>
             <select value={modelId} onChange={(e) => selectModel(e.target.value)}>

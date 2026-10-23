@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_wanxiang/pipeline/config.dart';
 import 'package:flutter_wanxiang/pipeline/drama/controller.dart';
 import 'package:flutter_wanxiang/pipeline/drama/cost.dart';
+import 'package:flutter_wanxiang/pipeline/drama/hash.dart';
 import 'package:flutter_wanxiang/pipeline/drama/llm.dart';
 import 'package:flutter_wanxiang/pipeline/drama/store.dart';
 import 'package:flutter_wanxiang/server/pipeline_server.dart';
@@ -267,6 +268,17 @@ void main() {
     );
     expect(extract.status, 200);
     expect((jsonDecode(extract.body) as Map<String, dynamic>)['logline'], '二舅逼债');
+
+    final withText = await _post(
+      port,
+      '/api/drama/series/jietiao/episodes/ep07/story:extract',
+      <String, Object?>{'text': '新的故事文本'},
+    );
+    expect(withText.status, 200);
+    expect(
+      (jsonDecode(withText.body) as Map<String, dynamic>)['source_hash'],
+      dramaHash(<String, Object?>{'text': '新的故事文本'}),
+    );
   });
 
   test('unwired step run is 501', () async {

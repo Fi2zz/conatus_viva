@@ -63,11 +63,19 @@ function imageFileUrl(id: string, index: number): string {
   return `/api/images/${id}/${index}`
 }
 
-export default function ImageStudio() {
+interface ImageStudioProps {
+  initialPrompt?: string
+  contextLabel?: string
+}
+
+export default function ImageStudio({
+  initialPrompt = '',
+  contextLabel,
+}: ImageStudioProps = {}) {
   const [models, setModels] = useState<ImageModelDto[]>([])
   const [modelId, setModelId] = useState('')
   const [mode, setMode] = useState<ImageModeName>('t2i')
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt)
   const [negative, setNegative] = useState('')
   const [size, setSize] = useState('')
   const [n, setN] = useState(1)
@@ -259,6 +267,9 @@ export default function ImageStudio() {
     <div className="layout">
       <div className="col-left">
         <form onSubmit={handleSubmit} className="form">
+          {contextLabel !== undefined && contextLabel !== '' && (
+            <p className="value">{contextLabel}</p>
+          )}
           <div className="field">
             <label>模型</label>
             <select value={modelId} onChange={(e) => selectModel(e.target.value)}>
