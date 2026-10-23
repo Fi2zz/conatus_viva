@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_wanxiang/pipeline/config.dart';
-import 'package:flutter_wanxiang/pipeline/text_to_video.dart';
+import 'package:flutter_wanxiang/pipeline/video_generation.dart';
 import 'package:flutter_wanxiang/server/pipeline_server.dart';
 import 'package:test/test.dart';
 
@@ -60,8 +60,12 @@ void main() {
   late Directory staticDir;
   late Directory outDir;
   late PipelineServer server;
+  String? capturedFirstFrame;
+  String? capturedRatio;
 
   setUp(() async {
+    capturedFirstFrame = null;
+    capturedRatio = null;
     staticDir = Directory.systemTemp.createTempSync('conatus_vid_static');
     File('${staticDir.path}/index.html').writeAsStringSync('<html></html>');
     outDir = Directory.systemTemp.createTempSync('conatus_vid_out');
@@ -73,6 +77,7 @@ void main() {
       videoRunner:
           ({
             required String prompt,
+            required String? firstFrameDataUrl,
             required String model,
             required String resolution,
             required String ratio,
@@ -81,11 +86,13 @@ void main() {
             required String contentId,
             required void Function(String) onProgress,
           }) async {
+            capturedFirstFrame = firstFrameDataUrl;
+            capturedRatio = ratio;
             final path = '${outDir.path}/$contentId/video.mp4';
             Directory('${outDir.path}/$contentId').createSync(recursive: true);
             File(path).writeAsBytesSync(<int>[1, 2]);
             onProgress('fake');
-            return TextToVideoResult(
+            return VideoGenResult(
               filePath: path,
               taskId: 't1',
               durationS: durationS,
@@ -99,6 +106,16 @@ void main() {
     await server.stop();
     if (staticDir.existsSync()) staticDir.deleteSync(recursive: true);
     if (outDir.existsSync()) outDir.deleteSync(recursive: true);
+  });
+
+  test('GET /api/models advertises t2v and i2v modes', () async {
+    final res = await _get(server.boundPort!, '/api/models');
+    expect(res.status, 200);
+    final video = (jsonDecode(res.body) as Map<String, dynamic>)['video'] as List;
+    expect(video, isNotEmpty);
+    for (final model in video.cast<Map<String, dynamic>>()) {
+      expect(model['modes'], containsAll(<String>['t2v', 'i2v']));
+    }
   });
 
   test('POST /api/videos then poll and download', () async {
@@ -128,6 +145,71 @@ void main() {
     final file = await _get(server.boundPort!, '/api/videos/$id/video');
     expect(file.status, 200);
     expect(file.body, isNotEmpty);
+  });
+
+  test('i2v requires a first-frame image', () async {
+    final res = await _postJson(server.boundPort!, '/api/videos', {
+      'model': 'wan3.0-video',
+      'mode': 'i2v',
+      'prompt': '',
+      'duration': 5,
+    });
+    expect(res.status, 400);
+    expect(res.body, contains('首帧图片'));
+  });
+
+  test('i2v accepts a first-frame image and pins ratio adaptive', () async {
+    const image = 'data:image/png;base64,AAAA';
+    final created = await _postJson(server.boundPort!, '/api/videos', {
+      'model': 'wan3.0-video',
+      'mode': 'i2v',
+      'image': image,
+      'prompt': '',
+      'resolution': '720P',
+      'ratio': '16:9',
+      'duration': 5,
+      'audio': false,
+    });
+    expect(created.status, 202);
+    final id =
+        (jsonDecode(created.body) as Map<String, dynamic>)['id'] as String;
+
+    var status = 'running';
+    for (var i = 0; i < 50 && status == 'running'; i++) {
+      final body =
+          jsonDecode((await _get(server.boundPort!, '/api/videos/$id')).body)
+              as Map<String, dynamic>;
+      status = body['status'] as String;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(status, 'completed');
+    expect(capturedFirstFrame, image);
+    expect(capturedRatio, 'adaptive');
+  });
+
+  test('i2v rejects malformed and oversized first-frame images', () async {
+    for (final image in <String>[
+      'https://example.com/a.png',
+      'data:image/png;base64,@@@',
+    ]) {
+      final res = await _postJson(server.boundPort!, '/api/videos', {
+        'model': 'wan3.0-video',
+        'mode': 'i2v',
+        'image': image,
+        'duration': 5,
+      });
+      expect(res.status, 400);
+    }
+
+    final oversized = 'data:image/png;base64,${'A' * (14 * 1024 * 1024)}';
+    final res = await _postJson(server.boundPort!, '/api/videos', {
+      'model': 'wan3.0-video',
+      'mode': 'i2v',
+      'image': oversized,
+      'duration': 5,
+    });
+    expect(res.status, 400);
+    expect(res.body, contains('10MB'));
   });
 
   test('unknown model and out-of-range duration are 400', () async {

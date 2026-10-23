@@ -14,6 +14,9 @@ enum ImageFamily { qwen3, wan27, zImage }
 /// 图片合成的子模式。
 enum ImageMode { t2i, i2i, series }
 
+/// 视频合成的子模式：文生视频 / 首帧图生视频。
+enum VideoMode { t2v, i2v }
+
 /// 一个图片模型的能力边界与默认单价。
 class ImageModel {
   const ImageModel({
@@ -60,11 +63,12 @@ class ImageModel {
   };
 }
 
-/// 一个文生视频模型的分辨率档、时长区间与默认单价。
+/// 一个视频生成模型的分辨率档、时长区间与默认单价。
 class VideoModel {
   const VideoModel({
     required this.id,
     required this.label,
+    required this.modes,
     required this.resolutions,
     required this.durationMin,
     required this.durationMax,
@@ -74,6 +78,10 @@ class VideoModel {
 
   final String id;
   final String label;
+
+  /// 该模型可作为哪些视频子模式使用；搜索框只列包含当前模式的模型。
+  final Set<VideoMode> modes;
+
   final List<String> resolutions;
   final int durationMin;
   final int durationMax;
@@ -86,6 +94,7 @@ class VideoModel {
     'id': id,
     'label': label,
     'kind': GenerationKind.video.name,
+    'modes': [for (final m in modes) m.name],
     'resolutions': resolutions,
     'duration_min': durationMin,
     'duration_max': durationMax,
@@ -153,11 +162,12 @@ const List<ImageModel> kImageModels = <ImageModel>[
   ),
 ];
 
-/// 通用文生视频页可选的模型（不含需要首帧图片的 i2v）。
-const List<VideoModel> kTextToVideoModels = <VideoModel>[
+/// 通用视频页可选的模型：万相 3.0 全能模型同时支持文生视频与首帧图生视频。
+const List<VideoModel> kVideoModels = <VideoModel>[
   VideoModel(
     id: 'wan3.0-video',
     label: '万相 3.0',
+    modes: <VideoMode>{VideoMode.t2v, VideoMode.i2v},
     resolutions: <String>['480P', '720P', '1080P'],
     durationMin: 2,
     durationMax: 30,
@@ -171,6 +181,7 @@ const List<VideoModel> kTextToVideoModels = <VideoModel>[
   VideoModel(
     id: 'wan3.0-video-prime',
     label: '万相 3.0 Prime',
+    modes: <VideoMode>{VideoMode.t2v, VideoMode.i2v},
     resolutions: <String>['480P', '720P', '1080P'],
     durationMin: 2,
     durationMax: 30,
@@ -191,9 +202,9 @@ ImageModel? findImageModel(String id) {
   return null;
 }
 
-/// The text-to-video model named [id], or null when it is not generatable.
-VideoModel? findTextToVideoModel(String id) {
-  for (final model in kTextToVideoModels) {
+/// The video model named [id], or null when it is not generatable.
+VideoModel? findVideoModel(String id) {
+  for (final model in kVideoModels) {
     if (model.id == id) return model;
   }
   return null;

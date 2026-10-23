@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_wanxiang/pipeline/bailian/wan30_video.dart';
 import 'package:flutter_wanxiang/pipeline/errors.dart';
-import 'package:flutter_wanxiang/pipeline/text_to_video.dart';
+import 'package:flutter_wanxiang/pipeline/video_generation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
@@ -14,6 +14,7 @@ class _Mock {
   int submits = 0;
   int polls = 0;
   int downloads = 0;
+  String? lastPostBody;
   List<int> videoBytes = <int>[];
   final List<http.Response> pollQueue = <http.Response>[];
 
@@ -22,6 +23,7 @@ class _Mock {
   Future<http.Response> _onRequest(http.Request req) async {
     if (req.method == 'POST') {
       submits++;
+      lastPostBody = req.body;
       return http.Response(
         jsonEncode(<String, dynamic>{
           'output': <String, dynamic>{
@@ -64,8 +66,8 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  Future<TextToVideoResult> run(_Mock mock, {String? outFile, int durationS = 5}) {
-    return generateTextToVideo(
+  Future<VideoGenResult> run(_Mock mock, {String? outFile, int durationS = 5}) {
+    return generateVideo(
       client: Wan30VideoClient(apiKey: 'k', client: mock.client, audio: true),
       prompt: '一只猫在草地上奔跑',
       durationS: durationS,
@@ -93,6 +95,33 @@ void main() {
     final file = File(result.filePath);
     expect(file.existsSync(), isTrue);
     expect(file.readAsBytesSync(), <int>[1, 2, 3, 4, 5]);
+  });
+
+  test('first-frame image routes to i2v media, prompt optional', () async {
+    const image = 'data:image/png;base64,AAAA';
+    final mock = _Mock()
+      ..videoBytes = <int>[9]
+      ..pollQueue.add(
+        pollRes('SUCCEEDED', videoUrl: 'https://video.example.com/v.mp4'),
+      );
+
+    final result = await generateVideo(
+      client: Wan30VideoClient(apiKey: 'k', client: mock.client),
+      prompt: '',
+      durationS: 5,
+      outFile: '${tmp.path}/i2v.mp4',
+      firstFrameDataUrl: image,
+      sleep: (_) async {},
+    );
+
+    final body = jsonDecode(mock.lastPostBody!) as Map<String, dynamic>;
+    expect(body['input'], <String, dynamic>{
+      'media': <dynamic>[
+        <String, dynamic>{'type': 'first_frame', 'url': image},
+      ],
+    });
+    expect(result.filePath, '${tmp.path}/i2v.mp4');
+    expect(mock.downloads, 1);
   });
 
   test('audit rejection surfaces as an auditReject error, no download', () async {

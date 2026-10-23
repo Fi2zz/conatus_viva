@@ -60,7 +60,7 @@ class Wan30VideoClient extends DashScopeVideoClient {
     return <String, dynamic>{
       'model': _model,
       'input': <String, dynamic>{
-        'prompt': prompt,
+        if (prompt.isNotEmpty) 'prompt': prompt,
         'media': <dynamic>[
           <String, dynamic>{'type': 'first_frame', 'url': imgUrl},
         ],

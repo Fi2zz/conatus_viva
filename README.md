@@ -3,7 +3,7 @@
 输入一组照片（本地路径或 URL）和方言地区，端到端产出 15–20 秒的相册视频：多模态选片、口播文案、方言配音、万相图生视频、字幕合成。全程断点续跑、不重复扣费。
 
 桌面 app 把生成能力分成两类：**图片合成**（万相图像 2.7 / 千问图像 3.0 / Z-Image）
-与**视频合成**（万相 3.0 文生视频、方言配音主讲人），另有视频编辑成本对比。
+与**视频合成**（万相 3.0 文生视频 / 图生视频、方言配音主讲人），另有视频编辑成本对比。
 
 核心是纯 Dart 管线（`lib/pipeline/`，不依赖 Flutter），三种使用形态：
 
@@ -80,9 +80,9 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 
 运行中进度打在 stderr（`[mm:ss]` 前缀），stdout 只输出结果 JSON。
 
-## 图片合成与通用文生视频（桌面 app）
+## 图片合成与视频合成（桌面 app）
 
-桌面 app 顶部四个平行 tab：**图片合成** / **文生视频** / **方言配音主讲人** / **视频编辑成本**。
+桌面 app 顶部五个平行 tab：**图片合成** / **文生视频** / **图生视频** / **方言配音主讲人** / **视频编辑成本**。
 
 ### 图片合成
 
@@ -105,6 +105,14 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 
 提示词 + 模型（`wan3.0-video` / `wan3.0-video-prime`）+ 分辨率 / 宽高比 / 时长 / 音频，
 复用万相 3.0 t2v 能力；成片在 `~/conatus_viva/videos/<id>/video.mp4`，页内预览与下载。
+
+### 图生视频
+
+上传一张首帧图片（PNG / JPEG / WebP，单张 ≤10MB），再选填运动提示词；模型、分辨率、
+时长与音频开关和文生视频共用同一套模型目录（`wan3.0-video` / `wan3.0-video-prime`）。
+宽高比固定 `adaptive`（跟随首帧图片），首帧图不产生输入秒数，计费口径与文生视频一致：
+**只按输出秒数计费**（`时长 × 该分辨率档单价`）。成片同样落在
+`~/conatus_viva/videos/<id>/video.mp4`。
 
 ## 方言配音主讲人（Flutter 桌面 app）
 
@@ -144,7 +152,7 @@ app 启动时 `lib/server/web_build_assets.dart` 把打包的 `web_build/` 物�
 | `POST /api/images` | 提交图片任务（模型 / 模式 / 提示词 / 张数 / 参考图） |
 | `GET /api/images/<id>` | 图片任务状态、日志、结果与费用 |
 | `GET /api/images/<id>/<n>` | 下载第 n 张图片 |
-| `POST /api/videos` | 提交通用文生视频（模型 / 提示词 / 分辨率 / 时长 / 音频） |
+| `POST /api/videos` | 提交视频任务（模型 / `mode=t2v\|i2v` / 提示词 / 分辨率 / 时长 / 音频；i2v 另带 `image` data URL） |
 | `GET /api/videos/<id>` | 视频任务状态与费用 |
 | `GET /api/videos/<id>/video` | 下载成片 mp4 |
 | `POST /api/t2v` | 提交一次主讲人文生视频生成（主题 + 方言 + 时长） |

@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import CostGate from './CostGate'
 import { downloadFile } from './download'
 import { estimateImageCost, unitPrice } from './imageCost'
+import {
+  readPickedFiles,
+  validatePicked,
+  type PickedFile,
+  type PreviewImage,
+  type RefImage,
+} from './imagePicker'
+import { ImageLightbox, PickedImageGrid } from './pickImages'
+import { useImagePicker } from './useImagePicker'
 import { useJob, type JobBase } from './useJob'
 
 type ImageModeName = 't2i' | 'i2i' | 'series'
@@ -23,22 +32,6 @@ interface ImageJobDto extends JobBase {
   cost?: number
 }
 
-interface RefImage {
-  name: string
-  dataUrl: string
-}
-
-interface PreviewImage {
-  src: string
-  name: string
-}
-
-interface PickedFile {
-  name: string
-  mime: string
-  base64: string
-}
-
 interface EditItem {
   id: string
   prompt: string
@@ -48,24 +41,13 @@ interface EditItem {
 
 type PickTarget = { itemId: string; field: 'image' | 'refs' } | null
 
-declare global {
-  interface Window {
-    /** Injected by the Flutter shell; absent in a plain browser. */
-    VivaNative?: { postMessage: (message: string) => void }
-    /** Called by the Flutter shell with files chosen in NSOpenPanel. */
-    __vivaPickResult?: (files: PickedFile[], error?: string) => void
-  }
-}
-
 const MODE_LABELS: Record<ImageModeName, string> = {
   t2i: '文生图',
   i2i: '图生图·编辑',
   series: '系列图',
 }
 
-const MAX_REF_BYTES = 10 * 1024 * 1024
 const MAX_EDIT_ITEMS = 20
-const ACCEPTED_REF_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 let itemSeq = 0
 function newEditItem(): EditItem {
@@ -81,102 +63,6 @@ function imageFileUrl(id: string, index: number): string {
   return `/api/images/${id}/${index}`
 }
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'))
-    reader.readAsDataURL(file)
-  })
-}
-
-/** Fails with a message a person can act on, or returns the image. */
-function validatePicked(file: PickedFile): RefImage | string {
-  if (!ACCEPTED_REF_TYPES.includes(file.mime)) {
-    return `${file.name} 仅支持 PNG / JPEG / WebP`
-  }
-  if (Math.ceil((file.base64.length * 3) / 4) > MAX_REF_BYTES) {
-    return `${file.name} 超过 10MB`
-  }
-  return {
-    name: file.name,
-    dataUrl: `data:${file.mime};base64,${file.base64}`,
-  }
-}
-
-function PickedImageGrid({
-  images,
-  max,
-  addLabel,
-  onAdd,
-  onRemove,
-  onPreview,
-  onDropFiles,
-}: {
-  images: RefImage[]
-  max: number
-  addLabel: string
-  onAdd: () => void
-  onRemove: (index: number) => void
-  onPreview: (image: PreviewImage) => void
-  onDropFiles: (files: FileList) => void
-}) {
-  const [dragging, setDragging] = useState(false)
-  const dragDepth = useRef(0)
-
-  return (
-    <div
-      className={dragging ? 'ref-grid dragging' : 'ref-grid'}
-      onDragEnter={(e) => {
-        e.preventDefault()
-        dragDepth.current += 1
-        setDragging(true)
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDragLeave={() => {
-        dragDepth.current -= 1
-        if (dragDepth.current <= 0) {
-          dragDepth.current = 0
-          setDragging(false)
-        }
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        dragDepth.current = 0
-        setDragging(false)
-        onDropFiles(e.dataTransfer.files)
-      }}
-    >
-      {images.map((image, i) => (
-        <div className="ref-tile" key={`${image.name}-${i}`}>
-          <button
-            type="button"
-            className="ref-preview"
-            aria-label={`预览 ${image.name}`}
-            onClick={() => onPreview({ src: image.dataUrl, name: image.name })}
-          >
-            <img src={image.dataUrl} alt={image.name} title={image.name} />
-          </button>
-          <button
-            type="button"
-            className="ref-remove"
-            aria-label={`移除 ${image.name}`}
-            onClick={() => onRemove(i)}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-      {images.length < max && (
-        <button type="button" className="ref-add" aria-label={addLabel} onClick={onAdd}>
-          <span>+</span>
-          <small>{addLabel}</small>
-        </button>
-      )}
-    </div>
-  )
-}
-
 export default function ImageStudio() {
   const [models, setModels] = useState<ImageModelDto[]>([])
   const [modelId, setModelId] = useState('')
@@ -190,7 +76,6 @@ export default function ImageStudio() {
   const [editItems, setEditItems] = useState<EditItem[]>(() => [newEditItem()])
   const [pickTarget, setPickTarget] = useState<PickTarget>(null)
   const [preview, setPreview] = useState<PreviewImage | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
@@ -212,15 +97,6 @@ export default function ImageStudio() {
 
   const job = useJob<ImageJobDto>(jobId, imageJobUrl)
   const model = models.find((m) => m.id === modelId)
-
-  useEffect(() => {
-    if (!preview) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPreview(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [preview])
 
   // wan2.7 pro 的 4K 只在「文生图、非组图」下可用；其余组合提前隐藏，避免确认后 400。
   const availableSizes = (model?.sizes ?? []).filter(
@@ -289,43 +165,22 @@ export default function ImageStudio() {
     )
   }
 
-  // WKWebView never opens a file input: the add tile asks the Flutter shell
-  // for NSOpenPanel and gets the bytes back here.
-  useEffect(() => {
-    window.__vivaPickResult = (files, error) => {
-      if (error) {
-        setFormError(`选择图片失败：${error}`)
-        return
-      }
-      applyRefs(pickTarget, files ?? [])
-      setPickTarget(null)
+  const { openPicker: openNativePicker, picker } = useImagePicker((files, error) => {
+    if (error) {
+      setFormError(`选择图片失败：${error}`)
+      return
     }
-    return () => {
-      window.__vivaPickResult = undefined
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickTarget, model, refs, editItems])
+    applyRefs(pickTarget, files)
+    setPickTarget(null)
+  })
 
   const openPicker = (target: PickTarget) => {
     setPickTarget(target)
-    if (window.VivaNative) {
-      window.VivaNative.postMessage('pickImages')
-      return
-    }
-    fileInputRef.current?.click()
+    openNativePicker(target === null || target.field === 'refs')
   }
 
   const addFiles = async (target: PickTarget, files: FileList) => {
-    const picked: PickedFile[] = []
-    for (const file of Array.from(files)) {
-      const dataUrl = await readAsDataUrl(file)
-      picked.push({
-        name: file.name,
-        mime: file.type,
-        base64: dataUrl.slice(dataUrl.indexOf(',') + 1),
-      })
-    }
-    applyRefs(target, picked)
+    applyRefs(target, await readPickedFiles(files))
   }
 
   const updateItem = (id: string, patch: Partial<EditItem>) => {
@@ -659,18 +514,7 @@ export default function ImageStudio() {
             </button>
           )}
 
-          <input
-            ref={fileInputRef}
-            className="ref-input"
-            type="file"
-            accept={ACCEPTED_REF_TYPES.join(',')}
-            multiple={pickTarget?.field === 'refs' || pickTarget === null}
-            onChange={(e) => {
-              if (e.target.files) void addFiles(pickTarget, e.target.files)
-              setPickTarget(null)
-              e.target.value = ''
-            }}
-          />
+          {picker}
         </form>
 
         {job && (
@@ -744,29 +588,7 @@ export default function ImageStudio() {
         </div>
       </aside>
 
-      {preview && (
-        <div
-          className="ref-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`预览 ${preview.name}`}
-          onClick={() => setPreview(null)}
-        >
-          <img
-            src={preview.src}
-            alt={preview.name}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            type="button"
-            className="ref-lightbox-close"
-            aria-label="关闭预览"
-            onClick={() => setPreview(null)}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <ImageLightbox preview={preview} onClose={() => setPreview(null)} />
     </div>
   )
 }

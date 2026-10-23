@@ -11,7 +11,7 @@ import 'package:flutter_wanxiang/pipeline/errors.dart';
 import 'package:flutter_wanxiang/pipeline/generation_models.dart';
 import 'package:flutter_wanxiang/pipeline/image_generation.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
-import 'package:flutter_wanxiang/pipeline/text_to_video.dart';
+import 'package:flutter_wanxiang/pipeline/video_generation.dart';
 import 'package:flutter_wanxiang/server/api_router.dart';
 
 /// One dialect dropdown option.
@@ -101,6 +101,19 @@ const List<String> _kxVideoRatios = <String>['adaptive', '16:9', '9:16', '1:1'];
 /// 这里按 spec 的 40MB 先挡住明显异常的大包。
 const int _maxImageBodyBytes = 40 * 1024 * 1024;
 
+/// 首帧图片上限：与图片合成的参考图一致（10MB 原图）。
+const int _maxFirstFrameBytes = 10 * 1024 * 1024;
+
+/// 视频请求体上限：10MB 首帧 base64 后约 13.4MB，留出 JSON 余量。
+const int _maxVideoBodyBytes = 20 * 1024 * 1024;
+
+/// Decoded byte size of a base64 data URL's payload (4 chars → 3 bytes).
+int _dataUrlBytes(String dataUrl) {
+  final comma = dataUrl.indexOf(',');
+  if (comma < 0) return 0;
+  return (dataUrl.length - comma - 1) * 3 ~/ 4;
+}
+
 /// Runs one text-to-video generation for [contentId]; the default builds a 万相
 /// 3.0 client from the config, but tests inject a fake to stay offline.
 typedef SpeakerVideoRunner = Future<SpeakerVideoResult> Function({
@@ -162,9 +175,10 @@ typedef ImageEditRunner =
     });
 
 /// Runs one generic text-to-video task (no speaker overlay); tests inject a fake.
-typedef TextToVideoRunner =
-    Future<TextToVideoResult> Function({
+typedef VideoRunner =
+    Future<VideoGenResult> Function({
       required String prompt,
+      required String? firstFrameDataUrl,
       required String model,
       required String resolution,
       required String ratio,
@@ -210,7 +224,7 @@ class PipelineServer {
   final ImageEditRunner? imageEditRunner;
 
   /// Test seam: when set, replaces the real text-to-video generation.
-  final TextToVideoRunner? videoRunner;
+  final VideoRunner? videoRunner;
 
   /// The cartoon presenter composited into every clip (from the bundled asset).
   final File? avatarImage;
@@ -309,7 +323,7 @@ class PipelineServer {
           ),
       ],
       'video': <Map<String, Object?>>[
-        for (final model in kTextToVideoModels)
+        for (final model in kVideoModels)
           model.toJson(
             resolvePrices(
               defaults: model.defaultPrices,
@@ -701,24 +715,68 @@ class PipelineServer {
       });
       return;
     }
-    final body = await _readJsonBody(req);
+    if (req.contentLength > _maxVideoBodyBytes) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': '请求体超过 20MB',
+      });
+      return;
+    }
+    final body = await _readJsonBody(req, maxBytes: _maxVideoBodyBytes);
     if (body == null) {
       _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
         'error': 'invalid JSON body',
       });
       return;
     }
-
     final modelId = (body['model'] as String?)?.trim() ?? '';
-    final model = findTextToVideoModel(modelId);
+    final model = findVideoModel(modelId);
     if (model == null) {
       _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
-        'error': '未知文生视频模型：$modelId',
+        'error': '未知视频模型：$modelId',
       });
       return;
     }
+    final modeName = (body['mode'] as String?)?.trim() ?? 't2v';
+    final mode = switch (modeName) {
+      't2v' => VideoMode.t2v,
+      'i2v' => VideoMode.i2v,
+      _ => null,
+    };
+    if (mode == null) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'mode 必须是 t2v/i2v',
+      });
+      return;
+    }
+    if (!model.modes.contains(mode)) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': '模型 ${model.id} 不支持 ${mode.name}',
+      });
+      return;
+    }
+    final firstFrame = (body['image'] as String?)?.trim() ?? '';
+    if (mode == VideoMode.i2v) {
+      if (firstFrame.isEmpty) {
+        _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+          'error': '图生视频需要首帧图片',
+        });
+        return;
+      }
+      if (!isValidDataUrl(firstFrame)) {
+        _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+          'error': '首帧图片必须是 PNG / JPEG / WebP 的 data URL',
+        });
+        return;
+      }
+      if (_dataUrlBytes(firstFrame) > _maxFirstFrameBytes) {
+        _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+          'error': '首帧图片超过 10MB',
+        });
+        return;
+      }
+    }
     final prompt = (body['prompt'] as String?)?.trim() ?? '';
-    if (prompt.isEmpty) {
+    if (mode == VideoMode.t2v && prompt.isEmpty) {
       _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
         'error': 'prompt 不能为空',
       });
@@ -745,7 +803,9 @@ class PipelineServer {
       });
       return;
     }
-    final ratio = (body['ratio'] as String?)?.trim() ?? 'adaptive';
+    final ratio = mode == VideoMode.i2v
+        ? 'adaptive'
+        : ((body['ratio'] as String?)?.trim() ?? 'adaptive');
     if (!_kxVideoRatios.contains(ratio)) {
       _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
         'error': 'ratio 必须是 ${_kxVideoRatios.join("/")}',
@@ -760,6 +820,7 @@ class PipelineServer {
       _runVideo(
         id: id,
         prompt: prompt,
+        firstFrameDataUrl: mode == VideoMode.i2v ? firstFrame : null,
         model: model,
         resolution: resolution,
         ratio: ratio,
@@ -773,6 +834,7 @@ class PipelineServer {
   Future<void> _runVideo({
     required String id,
     required String prompt,
+    required String? firstFrameDataUrl,
     required VideoModel model,
     required String resolution,
     required String ratio,
@@ -781,12 +843,14 @@ class PipelineServer {
   }) async {
     final record = _videoJobs[id]!;
     record.logs.add(
-      '开始：模型 ${model.id}，$resolution，$durationS 秒，音频=${audio ? '开' : '关'}',
+      '开始：模型 ${model.id}，${firstFrameDataUrl == null ? '文生视频' : '图生视频'}，'
+      '$resolution，$durationS 秒，音频=${audio ? '开' : '关'}',
     );
     try {
       final runner = videoRunner ?? _defaultVideoRunner;
       final result = await runner(
         prompt: prompt,
+        firstFrameDataUrl: firstFrameDataUrl,
         model: model.id,
         resolution: resolution,
         ratio: ratio,
@@ -821,8 +885,9 @@ class PipelineServer {
     }
   }
 
-  Future<TextToVideoResult> _defaultVideoRunner({
+  Future<VideoGenResult> _defaultVideoRunner({
     required String prompt,
+    required String? firstFrameDataUrl,
     required String model,
     required String resolution,
     required String ratio,
@@ -841,9 +906,10 @@ class PipelineServer {
       seed: cfg.t2vSeed,
       audio: audio,
     );
-    return generateTextToVideo(
+    return generateVideo(
       client: client,
       prompt: prompt,
+      firstFrameDataUrl: firstFrameDataUrl,
       durationS: durationS,
       outFile:
           '${videosOutputDir ?? _defaultVideosDir()}/$contentId/video.mp4',

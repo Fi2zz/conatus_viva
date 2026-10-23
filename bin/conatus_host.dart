@@ -10,7 +10,7 @@ import 'package:flutter_wanxiang/pipeline/ffmpeg.dart';
 import 'package:flutter_wanxiang/pipeline/host.dart';
 import 'package:flutter_wanxiang/pipeline/srt.dart';
 import 'package:flutter_wanxiang/pipeline/t2v_subtitles.dart';
-import 'package:flutter_wanxiang/pipeline/text_to_video.dart';
+import 'package:flutter_wanxiang/pipeline/video_generation.dart';
 
 /// 实验宿主：手跑月度相册视频流水线的 CLI 入口。
 ///
@@ -235,7 +235,7 @@ Future<int> runTextToVideo(PipelineConfig cfg, HostArgs args) async {
     audio: args.videoAudio ?? cfg.t2vAudio,
   );
   try {
-    final result = await generateTextToVideo(
+    final result = await generateVideo(
       client: client,
       prompt: prompt,
       durationS: args.videoDuration ?? cfg.t2vDuration,
@@ -267,7 +267,7 @@ Future<int> runTextToVideo(PipelineConfig cfg, HostArgs args) async {
 /// A `.srt` input is copied verbatim (timings already authored); other text is
 /// split into one cue per line, evenly across the clip (the model returns no
 /// transcript, so timing is approximate by construction).
-Future<String?> _writeSubtitles(HostArgs args, TextToVideoResult result) async {
+Future<String?> _writeSubtitles(HostArgs args, VideoGenResult result) async {
   final file = args.subtitleFile;
   final text = args.subtitleText;
   if (file == null && text == null) return null;

@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react'
 import CostGate from './CostGate'
 import { downloadFile } from './download'
+import {
+  readPickedFiles,
+  validatePicked,
+  type PickedFile,
+  type PreviewImage,
+  type RefImage,
+} from './imagePicker'
+import { ImageLightbox, PickedImageGrid } from './pickImages'
 import { unitPriceForTier } from './imageCost'
+import { useImagePicker } from './useImagePicker'
+import { estimateVideoCost } from './videoCost'
 import { useJob, type JobBase } from './useJob'
+
+export type VideoMode = 't2v' | 'i2v'
 
 interface VideoModelDto {
   id: string
   label: string
+  modes?: VideoMode[]
   resolutions: string[]
   prices: Record<string, number>
   duration_min: number
@@ -25,10 +38,17 @@ function videoJobUrl(id: string): string {
   return `/api/videos/${id}`
 }
 
-export default function TextToVideo() {
+/**
+ * 通用视频生成页。`t2v` 是纯提示词文生视频，`i2v` 以一张首帧图片 +
+ * 可选运动提示词生成；两者共用任务轮询、计费口径与成片预览。
+ */
+export default function VideoStudio({ mode }: { mode: VideoMode }) {
+  const imageToVideo = mode === 'i2v'
   const [models, setModels] = useState<VideoModelDto[]>([])
   const [modelId, setModelId] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [firstFrame, setFirstFrame] = useState<RefImage | null>(null)
+  const [preview, setPreview] = useState<PreviewImage | null>(null)
   const [resolution, setResolution] = useState('720P')
   const [ratio, setRatio] = useState('adaptive')
   const [duration, setDuration] = useState(5)
@@ -42,7 +62,9 @@ export default function TextToVideo() {
     fetch('/api/models')
       .then((r) => r.json())
       .then((data) => {
-        const list: VideoModelDto[] = data.video ?? []
+        const list: VideoModelDto[] = (data.video ?? []).filter((m: VideoModelDto) =>
+          (m.modes ?? []).includes(mode),
+        )
         setModels(list)
         if (list.length === 0) return
         setModelId(list[0].id)
@@ -50,14 +72,37 @@ export default function TextToVideo() {
         setDuration((d) => Math.min(Math.max(d, list[0].duration_min), list[0].duration_max))
       })
       .catch((e) => console.error('Failed to load video models:', e))
-  }, [])
+  }, [mode])
 
   const job = useJob<VideoJobDto>(jobId, videoJobUrl)
   const model = models.find((m) => m.id === modelId)
   const price = model ? unitPriceForTier(model.prices, resolution) : 0
-  const estimate = price * duration
+  const estimate = model ? estimateVideoCost(model.prices, resolution, duration) : 0
   const completed = job?.status === 'completed'
   const polling = job?.status === 'running'
+
+  const applyFirstFrame = (files: PickedFile[]) => {
+    if (files.length === 0) return
+    const result = validatePicked(files[0])
+    if (typeof result === 'string') {
+      setFormError(result)
+      return
+    }
+    setFirstFrame(result)
+    setFormError('')
+  }
+
+  const { openPicker, picker } = useImagePicker((files, error) => {
+    if (error) {
+      setFormError(`选择图片失败：${error}`)
+      return
+    }
+    applyFirstFrame(files)
+  })
+
+  const addFirstFrame = async (files: FileList) => {
+    applyFirstFrame(await readPickedFiles(files))
+  }
 
   const selectModel = (id: string) => {
     const next = models.find((m) => m.id === id)
@@ -70,7 +115,11 @@ export default function TextToVideo() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!prompt.trim()) {
+    if (imageToVideo && !firstFrame) {
+      setFormError('请先选择首帧图片')
+      return
+    }
+    if (!imageToVideo && !prompt.trim()) {
       setFormError('请先输入提示词')
       return
     }
@@ -88,11 +137,12 @@ export default function TextToVideo() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: model.id,
+          mode,
           prompt: prompt.trim(),
           resolution,
-          ratio,
           duration,
           audio,
+          ...(imageToVideo ? { image: firstFrame!.dataUrl } : { ratio }),
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -123,11 +173,38 @@ export default function TextToVideo() {
             </select>
           </div>
 
+          {imageToVideo && (
+            <div className="field">
+              <label>
+                首帧图片 <span className="value">（PNG / JPEG / WebP，单张 ≤10MB）</span>
+              </label>
+              <PickedImageGrid
+                images={firstFrame ? [firstFrame] : []}
+                max={1}
+                addLabel="选择图片"
+                onAdd={() => openPicker(false)}
+                onRemove={() => setFirstFrame(null)}
+                onPreview={setPreview}
+                onDropFiles={(files) => void addFirstFrame(files)}
+              />
+              <p className="value ref-hint">
+                画面从这张图开始，提示词描述希望发生的运动；点击缩略图可放大预览。
+              </p>
+            </div>
+          )}
+
           <div className="field">
-            <label>提示词</label>
+            <label>
+              提示词
+              {imageToVideo && <span className="value">（可选，描述画面运动）</span>}
+            </label>
             <textarea
               rows={4}
-              placeholder="例如：一只猫在草地上奔跑，电影感，逆光"
+              placeholder={
+                imageToVideo
+                  ? '例如：镜头缓慢推进，人物轻轻转头，光影流动'
+                  : '例如：一只猫在草地上奔跑，电影感，逆光'
+              }
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
             />
@@ -144,16 +221,24 @@ export default function TextToVideo() {
             </select>
           </div>
 
-          <div className="field">
-            <label>宽高比</label>
-            <select value={ratio} onChange={(e) => setRatio(e.target.value)}>
-              {RATIOS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
+          {imageToVideo ? (
+            <div className="field">
+              <label>
+                宽高比 <span className="value">adaptive（跟随首帧图片）</span>
+              </label>
+            </div>
+          ) : (
+            <div className="field">
+              <label>宽高比</label>
+              <select value={ratio} onChange={(e) => setRatio(e.target.value)}>
+                {RATIOS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="field">
             <label>
@@ -203,6 +288,8 @@ export default function TextToVideo() {
               {polling ? '生成中...' : '生成视频'}
             </button>
           )}
+
+          {picker}
         </form>
 
         {job && (
@@ -256,6 +343,8 @@ export default function TextToVideo() {
           )}
         </div>
       </aside>
+
+      <ImageLightbox preview={preview} onClose={() => setPreview(null)} />
     </div>
   )
 }

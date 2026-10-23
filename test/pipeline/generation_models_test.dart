@@ -17,12 +17,20 @@ void main() {
     expect(findImageModel('qwen-image-3.0')!.maxRefImages, 3);
   });
 
-  test('video catalog only exposes text-to-video models', () {
-    expect(kTextToVideoModels.map((m) => m.id), [
+  test('video catalog exposes t2v and i2v for the wan3.0 family', () {
+    expect(kVideoModels.map((m) => m.id), [
       'wan3.0-video',
       'wan3.0-video-prime',
     ]);
-    expect(findTextToVideoModel('wan2.6-i2v-flash'), isNull);
+    expect(findVideoModel('wan3.0-video')!.modes, {
+      VideoMode.t2v,
+      VideoMode.i2v,
+    });
+    expect(findVideoModel('wan3.0-video-prime')!.modes, {
+      VideoMode.t2v,
+      VideoMode.i2v,
+    });
+    expect(findVideoModel('wan2.6-i2v-flash'), isNull);
   });
 
   test('priceTierFor maps pixel sizes by area', () {

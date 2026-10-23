@@ -3,7 +3,7 @@ import 'dart:io';
 import 'bailian/wan30_video.dart';
 import 'ffmpeg.dart';
 import 'host.dart';
-import 'text_to_video.dart';
+import 'video_generation.dart';
 
 /// 文生视频时长下限（万相 3.0 支持 2–30 秒）。
 const int t2vMinDurationS = 2;
@@ -64,7 +64,7 @@ Future<SpeakerVideoResult> generateSpeakerVideo({
   final finalPath = '${dir.path}/video.mp4';
   final prompt = t2vPrompt(theme, dialect);
 
-  final generated = await generateTextToVideo(
+  final generated = await generateVideo(
     client: client,
     prompt: prompt,
     durationS: durationS,

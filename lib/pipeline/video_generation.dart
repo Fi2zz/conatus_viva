@@ -4,9 +4,9 @@ import 'bailian/dashscope_video.dart';
 import 'bailian/wan30_video.dart';
 import 'errors.dart';
 
-/// Outcome of one 文生视频 run.
-class TextToVideoResult {
-  const TextToVideoResult({
+/// Outcome of one generic video-generation run (t2v or first-frame i2v).
+class VideoGenResult {
+  const VideoGenResult({
     required this.filePath,
     required this.taskId,
     required this.durationS,
@@ -27,17 +27,20 @@ const List<Duration> _retryDelays = <Duration>[
   Duration(seconds: 2),
 ];
 
-/// Drives one 万相 3.0 text-to-video task end to end: submit a prompt-only
-/// body, poll to a terminal state, download the mp4 to [outFile].
+/// Drives one 万相 3.0 video task end to end: submit (prompt-only for t2v,
+/// first-frame media for i2v), poll to a terminal state, download the mp4 to
+/// [outFile].
 ///
 /// This is a one-shot CLI capability (no `state.json`, no resume): a transient
 /// provider error retries ×2 with the pipeline backoff, an audit rejection
 /// fails immediately, and the clip is only downloaded on success (spec §6).
-Future<TextToVideoResult> generateTextToVideo({
+Future<VideoGenResult> generateVideo({
   required Wan30VideoClient client,
   required String prompt,
   required int durationS,
   required String outFile,
+  /// First-frame image as `data:image/...;base64,...`; null → text-to-video.
+  String? firstFrameDataUrl,
   int pollSeconds = 15,
   int maxWaitMinutes = 10,
   Future<void> Function(Duration delay)? sleep,
@@ -47,10 +50,17 @@ Future<TextToVideoResult> generateTextToVideo({
   final wait = sleep ?? (Duration d) => Future<void>.delayed(d);
   final clock = now ?? DateTime.now;
   final emit = onProgress ?? (String _) {};
+  final imageToVideo = firstFrameDataUrl != null;
 
-  emit('提交文生视频任务（${durationS}s）…');
+  emit('提交${imageToVideo ? '图生视频' : '文生视频'}任务（${durationS}s）…');
   final task = await _withRetry(
-    () => client.submitTextToVideo(prompt: prompt, durationS: durationS),
+    () => imageToVideo
+        ? client.submit(
+            imgUrl: firstFrameDataUrl,
+            prompt: prompt,
+            durationS: durationS,
+          )
+        : client.submitTextToVideo(prompt: prompt, durationS: durationS),
     wait,
   );
   emit('任务 ${task.taskId} 已提交，等待渲染');
@@ -80,7 +90,7 @@ Future<TextToVideoResult> generateTextToVideo({
   _writeFile(outFile, bytes);
   emit('已保存：$outFile');
 
-  return TextToVideoResult(
+  return VideoGenResult(
     filePath: outFile,
     taskId: task.taskId,
     durationS: durationS,

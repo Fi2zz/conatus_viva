@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import EditCostEstimator from "./EditCostEstimator";
 import ImageStudio from "./ImageStudio";
-import TextToVideo from "./TextToVideo";
+import VideoStudio from "./VideoStudio";
 import "./App.css";
 
 interface Dialect {
@@ -33,7 +33,7 @@ const DEFAULT_T2V: T2vConfig = {
 };
 
 function App() {
-  const [mode, setMode] = useState<"image" | "video" | "speaker" | "edit-cost">(
+  const [mode, setMode] = useState<"image" | "video" | "i2v" | "speaker" | "edit-cost">(
     "image",
   );
   const [dialects, setDialects] = useState<Dialect[]>([]);
@@ -130,7 +130,7 @@ function App() {
     <div className="app">
       <header>
         <h1>Viva 创作台</h1>
-        <p className="subtitle">图片合成、文生视频与方言配音主讲人</p>
+        <p className="subtitle">图片合成、视频合成与方言配音主讲人</p>
       </header>
 
       <nav className="mode-tabs">
@@ -150,6 +150,13 @@ function App() {
         </button>
         <button
           type="button"
+          className={mode === "i2v" ? "tab active" : "tab"}
+          onClick={() => setMode("i2v")}
+        >
+          图生视频
+        </button>
+        <button
+          type="button"
           className={mode === "speaker" ? "tab active" : "tab"}
           onClick={() => setMode("speaker")}
         >
@@ -166,7 +173,9 @@ function App() {
 
       {mode === "image" && <ImageStudio />}
 
-      {mode === "video" && <TextToVideo />}
+      {mode === "video" && <VideoStudio mode="t2v" />}
+
+      {mode === "i2v" && <VideoStudio mode="i2v" />}
 
       {mode === "speaker" && (
         <div className="layout">
