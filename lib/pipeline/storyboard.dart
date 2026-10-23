@@ -121,6 +121,7 @@ class Shot {
     required this.priority,
     this.prop,
     this.motion,
+    this.visual,
   });
 
   final String id;
@@ -133,6 +134,9 @@ class Shot {
   final String? prop;
   final String? motion;
 
+  /// 画面提示词（可选）；供图片/视频生成与工作台检视使用。
+  final String? visual;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'kind': shotKindToWire(kind),
@@ -143,6 +147,7 @@ class Shot {
     'priority': shotPriorityToWire(priority),
     'prop': prop,
     'motion': motion,
+    'visual': visual,
   };
 }
 
@@ -339,6 +344,7 @@ class Storyboard {
           priority: priority,
           prop: _optionalString(map['prop'], 'shots[$id].prop'),
           motion: _optionalString(map['motion'], 'shots[$id].motion'),
+          visual: _optionalString(map['visual'], 'shots[$id].visual'),
         ),
       );
     }

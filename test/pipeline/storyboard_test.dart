@@ -177,6 +177,31 @@ void main() {
       expect(s03['priority'], 'normal');
     });
 
+    test('visual prompt parses, serializes and defaults to null', () {
+      final withVisual = Storyboard.fromJson(<String, Object?>{
+        'content_id': 'ep01',
+        'shots': <Object?>[
+          <String, Object?>{
+            'id': 's01',
+            'kind': 'insert',
+            'visual': '堂屋逆光，借条特写',
+          },
+        ],
+      });
+      expect(withVisual.shots.single.visual, '堂屋逆光，借条特写');
+      expect(
+        (withVisual.toJson()['shots']! as List<Object?>).first,
+        containsPair('visual', '堂屋逆光，借条特写'),
+      );
+
+      final withoutVisual = Storyboard.fromJson(minimalJson());
+      expect(withoutVisual.shots.single.visual, isNull);
+      expect(
+        (withoutVisual.toJson()['shots']! as List<Object?>).first,
+        containsPair('visual', null),
+      );
+    });
+
     test('roundtrip is canonical idempotent', () {
       final board = Storyboard.fromJsonString(
         File('test/fixtures/ep07.storyboard.json').readAsStringSync(),
