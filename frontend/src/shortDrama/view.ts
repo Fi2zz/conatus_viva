@@ -66,3 +66,9 @@ export function findStep(
 ): StepView | undefined {
   return steps.find((step) => step.key === key);
 }
+
+/// 舞台本地草稿的 React key。必须同时包含剧与集，否则不同剧的 `ep01`
+/// 会复用同一个舞台实例，保存时把 A 剧草稿写进 B 剧。
+export function stageIdentity(seriesId: string, episodeId: string): string {
+  return `${seriesId}/${episodeId}`;
+}

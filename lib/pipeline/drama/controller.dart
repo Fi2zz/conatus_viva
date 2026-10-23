@@ -254,6 +254,8 @@ class DramaController {
     if (series.seriesId != seriesId) {
       throw const FormatException('series_id 与路径不一致');
     }
+    // PUT 是更新，不是隐式创建；缺失应 404。
+    store.readSeries(seriesId);
     store.writeSeries(series);
     await _sendJson(req, HttpStatus.ok, <String, Object?>{
       'series': series.toJson(),
@@ -322,6 +324,8 @@ class DramaController {
     if (episode.seriesId != seriesId || episode.episodeId != episodeId) {
       throw const FormatException('episode ids 与路径不一致');
     }
+    // PUT 是更新，不是隐式创建；缺失应 404。
+    store.readEpisode(seriesId, episodeId);
     store.writeEpisode(episode);
     final board = store.readStoryboard(seriesId, episodeId);
     if (board != null) _writePlan(seriesId, episodeId, episode, board);

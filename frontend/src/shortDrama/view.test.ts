@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { STEP_ORDER, budgetPercent, findStep, stepStatusLabel } from './view'
+import { STEP_ORDER, budgetPercent, findStep, stageIdentity, stepStatusLabel } from './view'
 import type { StepView } from './types'
 
 function step(patch: Partial<StepView> = {}): StepView {
@@ -56,5 +56,13 @@ describe('step order', () => {
   it('findStep returns undefined for missing', () => {
     expect(findStep([step()], 'split')?.key).toBe('split')
     expect(findStep([step()], 'pack')).toBeUndefined()
+  })
+})
+
+describe('stageIdentity', () => {
+  it('includes the series id so same episode id in two series never collides', () => {
+    expect(stageIdentity('series-a', 'ep01')).not.toBe(
+      stageIdentity('series-b', 'ep01'),
+    )
   })
 })

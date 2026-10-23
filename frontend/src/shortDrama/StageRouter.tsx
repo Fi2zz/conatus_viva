@@ -1,5 +1,6 @@
 /// 工序舞台路由：把当前 step 映射到对应舞台组件。
 import type { EpisodeBundle, StepKey } from "./types";
+import { stageIdentity } from "./view";
 import SplitStage from "./stages/SplitStage";
 import StoryStage from "./stages/StoryStage";
 import CastStage from "./stages/CastStage";
@@ -24,7 +25,7 @@ export default function StageRouter(props: StageRouterProps) {
     case "split":
       return (
         <SplitStage
-          key={bundle.episode.episode_id}
+          key={stageIdentity(bundle.series.series_id, bundle.episode.episode_id)}
           bundle={bundle}
           onBundle={onBundle}
           onReload={onReload}
@@ -33,7 +34,7 @@ export default function StageRouter(props: StageRouterProps) {
     case "story":
       return (
         <StoryStage
-          key={bundle.episode.episode_id}
+          key={stageIdentity(bundle.series.series_id, bundle.episode.episode_id)}
           bundle={bundle}
           onReload={onReload}
         />
@@ -43,7 +44,7 @@ export default function StageRouter(props: StageRouterProps) {
     case "board":
       return (
         <BoardStage
-          key={bundle.episode.episode_id}
+          key={stageIdentity(bundle.series.series_id, bundle.episode.episode_id)}
           bundle={bundle}
           onBundle={onBundle}
           onReload={onReload}

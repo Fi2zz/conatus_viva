@@ -247,6 +247,36 @@ void main() {
     expect(again.status, 409);
   });
 
+  test('PUT missing series is 404 and does not create it', () async {
+    final port = server.boundPort!;
+    final res = await _put(port, '/api/drama/series/ghost', <String, Object?>{
+      'series': <String, Object?>{'series_id': 'ghost', 'title': '幽灵剧'},
+    });
+    expect(res.status, 404);
+    expect((await _get(port, '/api/drama/series/ghost')).status, 404);
+  });
+
+  test('PUT missing episode is 404 and does not create it', () async {
+    final port = server.boundPort!;
+    await _seed(port);
+    final bundle = jsonDecode(
+      (await _get(port, '/api/drama/series/jietiao/episodes/ep07')).body,
+    ) as Map<String, dynamic>;
+    final episode = Map<String, Object?>.from(
+      bundle['episode'] as Map<String, dynamic>,
+    )..['episode_id'] = 'ep99';
+    final res = await _put(
+      port,
+      '/api/drama/series/jietiao/episodes/ep99',
+      <String, Object?>{'episode': episode},
+    );
+    expect(res.status, 404);
+    expect(
+      (await _get(port, '/api/drama/series/jietiao/episodes/ep99')).status,
+      404,
+    );
+  });
+
   test('extract returns a draft and estimate is unpriced', () async {
     final port = server.boundPort!;
     await _seed(port);
