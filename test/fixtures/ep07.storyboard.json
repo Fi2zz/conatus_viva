@@ -1,0 +1,35 @@
+{
+  "content_id": "ep07",
+  "title": "堂屋对峙",
+  "dialect": "河南",
+  "frame": "1080x1920",
+  "budget_yuan": 20,
+  "cast": {
+    "erniu": { "name": "二舅", "voice_id": null, "dialect": "河南" },
+    "xiaoman": { "name": "小满" }
+  },
+  "shots": [
+    { "id": "s01", "kind": "speak_off", "framing": "over_shoulder", "speaker": "erniu",
+      "line": "你欠我的，今天该还了。", "duration_s": 3.0, "priority": "hook" },
+    { "id": "s02", "kind": "listen_face", "framing": "close", "speaker": "xiaoman",
+      "line": "二舅，我真没钱。", "duration_s": 2.6 },
+    { "id": "s03", "kind": "insert", "framing": "close_up", "prop": "借条", "duration_s": 1.6 },
+    { "id": "s04", "kind": "action", "framing": "medium", "speaker": "erniu",
+      "line": "", "duration_s": 3.0, "priority": "turn" },
+    { "id": "s05", "kind": "speak_off", "framing": "over_shoulder", "speaker": "erniu",
+      "line": "签字画押，白纸黑字。", "duration_s": 3.2 },
+    { "id": "s06", "kind": "speak_off", "framing": "profile", "speaker": "xiaoman",
+      "line": "三年了，你一句没钱就想走？", "duration_s": 3.4 },
+    { "id": "s07", "kind": "listen_face", "framing": "close", "speaker": "erniu",
+      "line": "", "duration_s": 2.2, "priority": "hook" },
+    { "id": "s08", "kind": "action", "framing": "medium", "speaker": "erniu",
+      "line": "", "duration_s": 3.0, "priority": "payoff" },
+    { "id": "s09", "kind": "insert", "framing": "close_up", "prop": "手里的笔", "duration_s": 1.4 },
+    { "id": "s10", "kind": "action", "framing": "wide", "speaker": "xiaoman",
+      "line": "", "duration_s": 2.0 },
+    { "id": "s11", "kind": "speak_off", "framing": "over_shoulder", "speaker": "erniu",
+      "line": "今天这字，你签也得签。", "duration_s": 3.0 },
+    { "id": "s12", "kind": "listen_face", "framing": "close", "speaker": "xiaoman",
+      "line": "", "duration_s": 1.8, "priority": "payoff" }
+  ]
+}
