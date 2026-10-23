@@ -175,6 +175,11 @@ class RenderPlan {
   };
 }
 
+/// i2v 单镜秒数的夹紧边界（`need` 夹紧与 `i2v_min_duration_raised` /
+/// `i2v_capped` 判定共用，避免魔法数字散落）。
+const int _i2vMinSeconds = 2;
+const int _i2vMaxSeconds = 10;
+
 /// 构建渲染计划单（纯函数，确定性）。
 RenderPlan buildRenderPlan({
   required Storyboard storyboard,
@@ -208,8 +213,7 @@ RenderPlan buildRenderPlan({
 
   // i2v 候选：所有 action，以及 priority != normal 的 listen_face。
   final originalIndex = <String, int>{
-    for (var i = 0; i < storyboard.shots.length; i++)
-      storyboard.shots[i].id: i,
+    for (var i = 0; i < storyboard.shots.length; i++) storyboard.shots[i].id: i,
   };
   final candidates = <Shot>[
     for (final shot in storyboard.shots)
@@ -232,14 +236,14 @@ RenderPlan buildRenderPlan({
     final d = durations[shot.id]!;
     final ceilDuration = d.ceil();
     var need = ceilDuration;
-    if (need < 2) need = 2;
-    if (need > 10) need = 10;
+    if (need < _i2vMinSeconds) need = _i2vMinSeconds;
+    if (need > _i2vMaxSeconds) need = _i2vMaxSeconds;
     if (need <= remaining) {
       // 只有真的分到 i2v 才记录 min/cap 两条 warning。
-      if (ceilDuration < 2) {
+      if (ceilDuration < _i2vMinSeconds) {
         planWarnings.add('i2v_min_duration_raised:${shot.id}');
       }
-      if (ceilDuration > 10) {
+      if (ceilDuration > _i2vMaxSeconds) {
         planWarnings.add('i2v_capped:${shot.id}');
       }
       i2vSecondsByShot[shot.id] = need;
@@ -266,9 +270,7 @@ RenderPlan buildRenderPlan({
       ShotKind.insert ||
       ShotKind.establishing => ShotRoute.kenburns,
       ShotKind.listenFace ||
-      ShotKind.action => i2vSeconds > 0
-          ? ShotRoute.i2v
-          : ShotRoute.micro,
+      ShotKind.action => i2vSeconds > 0 ? ShotRoute.i2v : ShotRoute.micro,
     };
     final cost = _round2(i2vSeconds * priceYuanPerSecond);
     plannedShots.add(
@@ -276,8 +278,7 @@ RenderPlan buildRenderPlan({
         shotId: shot.id,
         kind: shot.kind,
         route: route,
-        avatar: shot.kind == ShotKind.speakOff &&
-            shot.line.trim().isNotEmpty,
+        avatar: shot.kind == ShotKind.speakOff && shot.line.trim().isNotEmpty,
         durationS: d,
         i2vSeconds: i2vSeconds,
         costYuan: cost,

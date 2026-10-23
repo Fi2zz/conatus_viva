@@ -111,9 +111,9 @@ void main() {
   test('GET /api/models advertises per-model video modes', () async {
     final res = await _get(server.boundPort!, '/api/models');
     expect(res.status, 200);
-    final video = ((jsonDecode(res.body) as Map<String, dynamic>)['video']
-            as List)
-        .cast<Map<String, dynamic>>();
+    final video =
+        ((jsonDecode(res.body) as Map<String, dynamic>)['video'] as List)
+            .cast<Map<String, dynamic>>();
     expect(video, isNotEmpty);
     for (final model in video) {
       expect(model['modes'], isNotEmpty);
@@ -122,7 +122,8 @@ void main() {
     for (final id in <String>['wan3.0-video', 'wan3.0-video-prime']) {
       expect(byId[id]!['modes'], containsAll(<String>['t2v', 'i2v']));
     }
-    expect(byId['wan2.6-i2v-flash']!['modes'], ['i2v']);
+    expect(byId['wan2.6-i2v-flash']!['modes'], unorderedEquals(['i2v']));
+    expect(byId['wan2.6-i2v-flash']!['modes'], isNot(contains('t2v')));
   });
 
   test('POST /api/videos then poll and download', () async {

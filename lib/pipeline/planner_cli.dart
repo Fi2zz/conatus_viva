@@ -53,28 +53,44 @@ ArgParser buildPlannerParser() {
   parser.addCommand(
     'plan',
     ArgParser()
+      ..addFlag('help', abbr: 'h', negatable: false, help: '打印用法')
       ..addOption('storyboard', help: '分镜表 JSON 路径（必填）')
       ..addOption('budget', help: '本集预算（元），缺省用 storyboard.budget_yuan')
       ..addOption('max-i2v-seconds', help: 'i2v 秒数上限，0 = 不限')
-      ..addOption(
-        'out',
-        help: '输出路径，缺省 <outDir>/<contentId>/07_plan.json',
-      ),
+      ..addOption('out', help: '输出路径，缺省 <outDir>/<contentId>/07_plan.json'),
   );
   return parser;
+}
+
+/// 拼接完整用法文本：顶层 `parser.usage` + `子命令:` 段 + `plan` 子命令自身用法。
+///
+/// `ArgParser.usage` 不列出子命令，单独打印会丢失 `plan` 及其选项，故在此显式
+/// 汇总，供 `--help`、无子命令与各类用法错误统一使用。
+String plannerUsage(ArgParser parser) {
+  final buffer = StringBuffer(parser.usage);
+  buffer.write(
+    '\n子命令:\n'
+    '  plan --storyboard <path> [--budget <yuan>] '
+    '[--max-i2v-seconds <n>] [--out <path>]\n',
+  );
+  final plan = parser.commands['plan'];
+  if (plan != null) {
+    buffer.write('\n${plan.usage}');
+  }
+  return buffer.toString();
 }
 
 /// 从解析结果取 `plan` 子命令参数；用法错误打印 usage 到 stderr 并返回 null。
 PlannerArgs? parsePlannerArgs(ArgResults results, ArgParser parser) {
   final command = results.command;
   if (command == null) {
-    stderr.writeln('缺少子命令 plan\n\n${parser.usage}');
+    stderr.writeln('缺少子命令 plan\n\n${plannerUsage(parser)}');
     return null;
   }
 
   final storyboard = command['storyboard'] as String?;
   if (storyboard == null || storyboard.isEmpty) {
-    stderr.writeln('必须提供非空的 --storyboard 路径\n\n${parser.usage}');
+    stderr.writeln('必须提供非空的 --storyboard 路径\n\n${plannerUsage(parser)}');
     return null;
   }
 
@@ -83,7 +99,7 @@ PlannerArgs? parsePlannerArgs(ArgResults results, ArgParser parser) {
   if (rawBudget != null) {
     final value = double.tryParse(rawBudget);
     if (value == null || !value.isFinite || value <= 0) {
-      stderr.writeln('--budget 必须是有限正数：$rawBudget\n\n${parser.usage}');
+      stderr.writeln('--budget 必须是有限正数：$rawBudget\n\n${plannerUsage(parser)}');
       return null;
     }
     budgetYuan = value;
@@ -94,7 +110,9 @@ PlannerArgs? parsePlannerArgs(ArgResults results, ArgParser parser) {
   if (rawMax != null) {
     final value = int.tryParse(rawMax);
     if (value == null || value < 0) {
-      stderr.writeln('--max-i2v-seconds 必须 >= 0：$rawMax\n\n${parser.usage}');
+      stderr.writeln(
+        '--max-i2v-seconds 必须 >= 0：$rawMax\n\n${plannerUsage(parser)}',
+      );
       return null;
     }
     maxI2vSeconds = value;
@@ -154,14 +172,21 @@ Future<int> runPlan(
     return exitInput;
   }
 
-  final plan = buildRenderPlan(
-    storyboard: storyboard,
-    priceYuanPerSecond: defaultI2vPriceYuanPerSecond(),
-    budgetYuan: args.budgetYuan,
-    maxI2vSeconds: args.maxI2vSeconds,
-  );
+  final RenderPlan plan;
+  try {
+    plan = buildRenderPlan(
+      storyboard: storyboard,
+      priceYuanPerSecond: defaultI2vPriceYuanPerSecond(),
+      budgetYuan: args.budgetYuan,
+      maxI2vSeconds: args.maxI2vSeconds,
+    );
+  } on ArgumentError catch (e) {
+    stderr.writeln('${e.message}');
+    return exitUsage;
+  }
 
-  final outputPath = args.outPath ??
+  final outputPath =
+      args.outPath ??
       '${outDir ?? 'pipeline_out'}/${storyboard.contentId}/07_plan.json';
   final encoded = encodePlanJson(plan);
 
@@ -173,12 +198,13 @@ Future<int> runPlan(
     return exitWrite;
   }
 
+  stdout.write(encoded);
+
   final sink = warningSink ?? stderr;
   for (final warning in plan.warnings) {
     sink.writeln('warn: $warning');
   }
 
-  stdout.write(encoded);
   return exitOk;
 }
 
@@ -191,11 +217,11 @@ Future<int> runCli(List<String> argv) async {
   try {
     results = parser.parse(argv);
   } on FormatException catch (e) {
-    stderr.writeln('${e.message}\n\n${parser.usage}');
+    stderr.writeln('${e.message}\n\n${plannerUsage(parser)}');
     return exitUsage;
   }
-  if (results.flag('help')) {
-    stdout.writeln(parser.usage);
+  if (results.flag('help') || (results.command?.flag('help') ?? false)) {
+    stdout.writeln(plannerUsage(parser));
     return exitOk;
   }
   final args = parsePlannerArgs(results, parser);

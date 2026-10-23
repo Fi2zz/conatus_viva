@@ -38,7 +38,11 @@ void main() {
         expect(
           parsePlannerArgs(
             parser.parse(<String>[
-              'plan', '--storyboard', 'a.json', '--budget', budget,
+              'plan',
+              '--storyboard',
+              'a.json',
+              '--budget',
+              budget,
             ]),
             parser,
           ),
@@ -53,7 +57,11 @@ void main() {
         expect(
           parsePlannerArgs(
             parser.parse(<String>[
-              'plan', '--storyboard', 'a.json', '--max-i2v-seconds', seconds,
+              'plan',
+              '--storyboard',
+              'a.json',
+              '--max-i2v-seconds',
+              seconds,
             ]),
             parser,
           ),
@@ -75,8 +83,15 @@ void main() {
     test('合法参数 → 字段正确', () {
       final args = parsePlannerArgs(
         parser.parse(<String>[
-          'plan', '--storyboard', 'a.json', '--budget', '12.5',
-          '--max-i2v-seconds', '20', '--out', 'out/p.json',
+          'plan',
+          '--storyboard',
+          'a.json',
+          '--budget',
+          '12.5',
+          '--max-i2v-seconds',
+          '20',
+          '--out',
+          'out/p.json',
         ]),
         parser,
       );
@@ -104,6 +119,10 @@ void main() {
       expect(await runCli(<String>['--help']), 0);
     });
 
+    test('plan --help → 0', () async {
+      expect(await runCli(<String>['plan', '--help']), 0);
+    });
+
     test('无子命令 → 64', () async {
       expect(await runCli(<String>[]), 64);
     });
@@ -113,13 +132,31 @@ void main() {
     });
   });
 
+  group('plannerUsage', () {
+    test('包含 plan 与全部选项', () {
+      final usage = plannerUsage(buildPlannerParser());
+      for (final token in <String>[
+        'plan',
+        '--storyboard',
+        '--budget',
+        '--max-i2v-seconds',
+        '--out',
+      ]) {
+        expect(usage, contains(token), reason: token);
+      }
+    });
+  });
+
   test('defaultI2vPriceYuanPerSecond == 0.15', () {
     expect(defaultI2vPriceYuanPerSecond(), 0.15);
   });
 
   group('encodePlanJson', () {
     test('以单个 \\n 结尾且可被 jsonDecode 还原', () {
-      final plan = buildRenderPlan(storyboard: ep07(), priceYuanPerSecond: 0.15);
+      final plan = buildRenderPlan(
+        storyboard: ep07(),
+        priceYuanPerSecond: 0.15,
+      );
       final encoded = encodePlanJson(plan);
       expect(encoded.endsWith('\n'), isTrue);
       expect(encoded, isNot(endsWith('\n\n')));
@@ -145,19 +182,22 @@ void main() {
       outPath: out,
     );
 
-    test('fixture → 0，文件在 <outDir>/ep07/07_plan.json，内容等于 encodePlanJson', () async {
-      final code = await runPlan(planArgs(), outDir: temp.path);
-      expect(code, 0);
-      final file = File('${temp.path}/ep07/07_plan.json');
-      expect(file.existsSync(), isTrue);
-      final expected = encodePlanJson(
-        buildRenderPlan(
-          storyboard: ep07(),
-          priceYuanPerSecond: defaultI2vPriceYuanPerSecond(),
-        ),
-      );
-      expect(file.readAsStringSync(), expected);
-    });
+    test(
+      'fixture → 0，文件在 <outDir>/ep07/07_plan.json，内容等于 encodePlanJson',
+      () async {
+        final code = await runPlan(planArgs(), outDir: temp.path);
+        expect(code, 0);
+        final file = File('${temp.path}/ep07/07_plan.json');
+        expect(file.existsSync(), isTrue);
+        final expected = encodePlanJson(
+          buildRenderPlan(
+            storyboard: ep07(),
+            priceYuanPerSecond: defaultI2vPriceYuanPerSecond(),
+          ),
+        );
+        expect(file.readAsStringSync(), expected);
+      },
+    );
 
     test('--out 显式路径优先生效', () async {
       final out = '${temp.path}/custom/plan.json';
@@ -176,7 +216,8 @@ void main() {
     });
 
     test('JSON 语法错误 → 65', () async {
-      final bad = File('${temp.path}/bad.json')..writeAsStringSync('{ not json');
+      final bad = File('${temp.path}/bad.json')
+        ..writeAsStringSync('{ not json');
       final code = await runPlan(
         PlannerArgs(storyboardPath: bad.path),
         outDir: temp.path,
@@ -186,10 +227,12 @@ void main() {
 
     test('非法 schema → 65', () async {
       final bad = File('${temp.path}/bad.json')
-        ..writeAsStringSync(jsonEncode(<String, Object?>{
-          'content_id': 'ep01',
-          'shots': <Object?>[],
-        }));
+        ..writeAsStringSync(
+          jsonEncode(<String, Object?>{
+            'content_id': 'ep01',
+            'shots': <Object?>[],
+          }),
+        );
       final code = await runPlan(
         PlannerArgs(storyboardPath: bad.path),
         outDir: temp.path,
@@ -212,6 +255,21 @@ void main() {
       );
       expect(code, 0);
       expect(sink.toString(), contains('warn: no_i2v_budget'));
+    });
+
+    test('直接构造负 budget / 负 max-i2v-seconds → 64', () async {
+      for (final args in <PlannerArgs>[
+        PlannerArgs(
+          storyboardPath: 'test/fixtures/ep07.storyboard.json',
+          budgetYuan: -1,
+        ),
+        PlannerArgs(
+          storyboardPath: 'test/fixtures/ep07.storyboard.json',
+          maxI2vSeconds: -1,
+        ),
+      ]) {
+        expect(await runPlan(args, outDir: temp.path), 64);
+      }
     });
   });
 }
