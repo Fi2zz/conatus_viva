@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./shortDrama/ShortDrama.css";
 import {
   costByRoute,
@@ -66,6 +66,8 @@ export default function ShortDrama() {
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("prod");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /// 请求序号：单调递增，用于丢弃迟到的旧响应，避免并发加载串台。
+  const requestSeq = useRef(0);
 
   const applyResult = useCallback((targetId: string, r: PlanResult) => {
     if (r.ok) {
@@ -83,23 +85,36 @@ export default function ShortDrama() {
 
   const load = useCallback(
     (targetId: string) => {
+      const trimmed = targetId.trim();
+      if (trimmed === "") {
+        setError("请输入 content_id");
+        setLoading(false);
+        return;
+      }
+      // 抢占当前请求序号：只有最新一次请求的结果 / 收尾才允许落地状态，
+      // 迟到的旧响应（含 setLoading(false)）会被丢弃，避免串台。
+      const seq = ++requestSeq.current;
       setLoading(true);
       setError("");
       setPlan(null);
       setSelectedId(null);
-      void requestPlan(targetId)
-        .then((r) => applyResult(targetId, r))
-        .finally(() => setLoading(false));
+      void requestPlan(trimmed)
+        .then((r) => {
+          if (seq !== requestSeq.current) return;
+          applyResult(trimmed, r);
+        })
+        .finally(() => {
+          if (seq === requestSeq.current) setLoading(false);
+        });
     },
     [applyResult],
   );
 
-  // 自动加载默认 content_id。
+  // 自动加载默认 content_id（复用带序号守卫的 load，避免双请求路径）。
+  // 通过微任务推迟到 effect 返回后执行，避免同步 setState 触发 react 告警。
   useEffect(() => {
-    void requestPlan("ep07")
-      .then((r) => applyResult("ep07", r))
-      .finally(() => setLoading(false));
-  }, [applyResult]);
+    queueMicrotask(() => void load("ep07"));
+  }, [load]);
 
   const selected = selectedId
     ? (plan?.shots.find((s) => s.shot_id === selectedId) ?? null)

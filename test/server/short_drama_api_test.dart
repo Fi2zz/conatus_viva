@@ -119,4 +119,20 @@ void main() {
     expect(res.status, 500);
     expect(jsonDecode(res.body), {'error': 'invalid plan file'});
   });
+
+  test('trailing slash without id returns 400', () async {
+    final res = await _get(server.boundPort!, '/api/short-drama/plans/');
+    expect(res.status, 400);
+    expect(jsonDecode(res.body), {'error': 'invalid content id'});
+  });
+
+  test('plan file with invalid JSON text returns 500', () async {
+    final dir = Directory('${plansDir.path}/ep09');
+    dir.createSync(recursive: true);
+    File('${dir.path}/07_plan.json').writeAsStringSync('{');
+
+    final res = await _get(server.boundPort!, '/api/short-drama/plans/ep09');
+    expect(res.status, 500);
+    expect(jsonDecode(res.body), {'error': 'invalid plan file'});
+  });
 }
