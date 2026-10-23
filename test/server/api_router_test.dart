@@ -40,5 +40,25 @@ void main() {
       expect(apiRouteFor('GET', '/api/videos/vid-1'), ApiRoute.getVideo);
       expect(apiRouteFor('POST', '/api/videos/vid-1'), ApiRoute.unknown);
     });
+
+    test('short-drama plan route, GET only with an id', () {
+      expect(
+        apiRouteFor('GET', '/api/short-drama/plans/ep07'),
+        ApiRoute.getShortDramaPlan,
+      );
+      expect(
+        apiRouteFor('GET', '/api/short-drama/plans/ep-07_abc'),
+        ApiRoute.getShortDramaPlan,
+      );
+      expect(
+        apiRouteFor('POST', '/api/short-drama/plans/ep07'),
+        ApiRoute.unknown,
+      );
+      expect(apiRouteFor('GET', '/api/short-drama/plans'), ApiRoute.unknown);
+      expect(
+        apiRouteFor('GET', '/api/short-drama/other'),
+        ApiRoute.unknown,
+      );
+    });
   });
 }

@@ -206,6 +206,7 @@ class PipelineServer {
     this.outputDir,
     this.imagesOutputDir,
     this.videosOutputDir,
+    this.plansDir,
   }) : _runs = <String, RunRecord>{},
        _imageJobs = <String, JobRunRecord>{},
        _videoJobs = <String, JobRunRecord>{};
@@ -238,6 +239,9 @@ class PipelineServer {
   /// Absolute dir generic videos are written to; null →
   /// `$HOME/conatus_viva/videos`.
   final String? videosOutputDir;
+
+  /// 短剧计划单根目录；null → `pipeline_out`（相对 CWD）。测试 seam。
+  final String? plansDir;
 
   final Map<String, RunRecord> _runs;
   final Map<String, JobRunRecord> _imageJobs;
@@ -302,6 +306,8 @@ class PipelineServer {
         await _getVideo(req);
       case ApiRoute.getVideoFile:
         await _getVideoFile(req);
+      case ApiRoute.getShortDramaPlan:
+        await _getShortDramaPlan(req);
       case ApiRoute.unknown:
         _sendJson(req, HttpStatus.notFound, <String, dynamic>{
           'error': 'not found',
@@ -970,6 +976,58 @@ class PipelineServer {
       )
       ..headers.set(HttpHeaders.contentLengthHeader, await file.length());
     await file.openRead().pipe(req.response);
+  }
+
+  /// 读取短剧渲染计划单（`GET /api/short-drama/plans/<content_id>`）。
+  ///
+  /// 只读、无鉴权，靠 loopback 隔离。路径由经过校验的 id 拼出，不接受任意
+  /// 路径；id 只允许 `[A-Za-z0-9_-]`，从根目录读 `<id>/07_plan.json`。
+  Future<void> _getShortDramaPlan(HttpRequest req) async {
+    final segments = req.uri.pathSegments;
+    if (segments.length != 4 ||
+        segments[0] != 'api' ||
+        segments[1] != 'short-drama' ||
+        segments[2] != 'plans') {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'invalid content id',
+      });
+      return;
+    }
+    final id = segments[3];
+    if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(id)) {
+      _sendJson(req, HttpStatus.badRequest, <String, dynamic>{
+        'error': 'invalid content id',
+      });
+      return;
+    }
+
+    final file = File('${plansDir ?? 'pipeline_out'}/$id/07_plan.json');
+    final String text;
+    try {
+      text = await file.readAsString();
+    } on FileSystemException {
+      _sendJson(req, HttpStatus.notFound, <String, dynamic>{
+        'error': 'plan not found',
+      });
+      return;
+    }
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException {
+      _sendJson(req, HttpStatus.internalServerError, <String, dynamic>{
+        'error': 'invalid plan file',
+      });
+      return;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      _sendJson(req, HttpStatus.internalServerError, <String, dynamic>{
+        'error': 'invalid plan file',
+      });
+      return;
+    }
+    _sendJson(req, HttpStatus.ok, decoded);
   }
 
   Future<void> _createT2v(HttpRequest req) async {
