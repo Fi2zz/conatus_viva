@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import EditCostEstimator from "./EditCostEstimator";
 import ImageStudio from "./ImageStudio";
+import ShortDrama from "./ShortDrama";
 import VideoStudio from "./VideoStudio";
 import "./App.css";
 
@@ -33,9 +34,9 @@ const DEFAULT_T2V: T2vConfig = {
 };
 
 function App() {
-  const [mode, setMode] = useState<"image" | "video" | "i2v" | "speaker" | "edit-cost">(
-    "image",
-  );
+  const [mode, setMode] = useState<
+    "image" | "video" | "i2v" | "speaker" | "edit-cost" | "short-drama"
+  >("image");
   const [dialects, setDialects] = useState<Dialect[]>([]);
   const [t2v, setT2v] = useState<T2vConfig>(DEFAULT_T2V);
   const [duration, setDuration] = useState(5);
@@ -168,6 +169,13 @@ function App() {
           onClick={() => setMode("edit-cost")}
         >
           视频编辑成本
+        </button>
+        <button
+          type="button"
+          className={mode === "short-drama" ? "tab active" : "tab"}
+          onClick={() => setMode("short-drama")}
+        >
+          短剧工作台
         </button>
       </nav>
 
@@ -306,6 +314,8 @@ function App() {
       )}
 
       {mode === "edit-cost" && <EditCostEstimator />}
+
+      {mode === "short-drama" && <ShortDrama />}
     </div>
   );
 }

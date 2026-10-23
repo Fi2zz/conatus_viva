@@ -1,0 +1,427 @@
+/* 短剧工作台 —— 样式自包含，不依赖其他组件样式。 */
+
+.short-drama {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sd-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sd-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6e6e73;
+  font-weight: 500;
+}
+
+.sd-id input {
+  padding: 8px 12px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: #1d1d1f;
+}
+
+.sd-load {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #0071e3;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sd-load:hover:not(:disabled) {
+  background: #0077ed;
+}
+
+.sd-load:disabled {
+  background: #99c3f5;
+  cursor: not-allowed;
+}
+
+.sd-view-toggle {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sd-view-toggle button {
+  padding: 8px 16px;
+  border: 1px solid #d2d2d7;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sd-view-toggle button:hover {
+  background: #f5f5f7;
+}
+
+.sd-view-toggle button.active {
+  background: #0071e3;
+  border-color: #0071e3;
+  color: #fff;
+}
+
+.sd-status {
+  color: #6e6e73;
+  font-size: 14px;
+}
+
+.sd-error {
+  color: #d3071b;
+  background: #fff5f5;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.sd-empty {
+  color: #8e8e93;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-size: 14px;
+}
+
+/* ── 产线视图 ─────────────────────────── */
+
+.sd-plan-head {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sd-plan-head h2 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+.sd-meta {
+  color: #6e6e73;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.sd-budget {
+  max-width: 480px;
+}
+
+.sd-budget-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: #1d1d1f;
+}
+
+.sd-budget-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #f0f0f2;
+  overflow: hidden;
+}
+
+.sd-budget-bar i {
+  display: block;
+  height: 100%;
+  background: #0071e3;
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+
+.sd-prod-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .sd-prod-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sd-prod-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sd-hook,
+.sd-timeline,
+.sd-inspect {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sd-hook h3,
+.sd-timeline h3,
+.sd-inspect h3 {
+  font-size: 15px;
+  margin: 0 0 12px;
+  color: #1d1d1f;
+}
+
+.sd-hook-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #d2d2d7;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  color: #1d1d1f;
+  cursor: pointer;
+}
+
+.sd-chip span {
+  color: #0071e3;
+  font-weight: 500;
+}
+
+.sd-chip:hover {
+  background: #f5f7ff;
+  border-color: #0071e3;
+}
+
+.sd-timeline-bar {
+  display: flex;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e5e5ea;
+  background: #fafafa;
+}
+
+.sd-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  border: none;
+  border-right: 1px solid #e5e5ea;
+  background: #fff;
+  color: #1d1d1f;
+  font-size: 11px;
+  cursor: pointer;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.sd-block:last-child {
+  border-right: none;
+}
+
+.sd-block:hover {
+  background: #f5f7ff;
+}
+
+.sd-block.selected {
+  background: #eaf2ff;
+  outline: 2px solid #0071e3;
+  outline-offset: -2px;
+}
+
+.sd-block.route-kenburns {
+  background: #f5f5f7;
+}
+
+.sd-block.route-i2v {
+  background: #fff7ed;
+}
+
+.sd-block-id {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.sd-block-route {
+  color: #6e6e73;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.sd-block-nums {
+  color: #0071e3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.sd-lines {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sd-line {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: #3a3a3c;
+}
+
+.sd-line-id {
+  color: #6e6e73;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sd-inspect {
+  position: sticky;
+  top: 24px;
+}
+
+.sd-inspect-empty {
+  color: #8e8e93;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.sd-kv {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 6px 12px;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.sd-kv dt {
+  color: #6e6e73;
+}
+
+.sd-kv dd {
+  margin: 0;
+  color: #1d1d1f;
+  word-break: break-word;
+}
+
+.sd-warn-none {
+  color: #8e8e93;
+  font-size: 13px;
+}
+
+.sd-warnings {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #92600f;
+}
+
+.sd-warnings li {
+  margin-bottom: 4px;
+}
+
+/* ── 画布视图 ─────────────────────────── */
+
+.sd-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sd-canvas-banner {
+  background: #fff3cd;
+  color: #92600f;
+  border: 1px solid #ffe69c;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sd-canvas-scroll {
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sd-canvas-board {
+  position: relative;
+  width: 850px;
+  height: 390px;
+}
+
+.sd-canvas-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.sd-edge {
+  fill: none;
+  stroke: #c7c7cc;
+  stroke-width: 1.5;
+}
+
+.sd-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #d2d2d7;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sd-node-idx {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  font-size: 11px;
+  color: #8e8e93;
+  font-weight: 600;
+}
+
+.sd-node-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.sd-node-meta {
+  font-size: 12px;
+  color: #6e6e73;
+}
