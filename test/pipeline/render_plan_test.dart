@@ -304,6 +304,10 @@ void main() {
         'i2v_seconds': 3,
         'cost_yuan': 0.45,
         'downgrade_reason': null,
+        'framing': 'medium',
+        'speaker': 'erniu',
+        'line': '',
+        'priority': 'turn',
       });
     });
 
@@ -336,6 +340,86 @@ void main() {
       });
       expect(json['counts'], {'kenburns': 6, 'micro': 1, 'i2v': 5});
       expect(json['warnings'], <String>[]);
+    });
+  });
+
+  group('UI display fields passthrough', () {
+    RenderPlan plan() =>
+        buildRenderPlan(storyboard: ep07(), priceYuanPerSecond: 0.15);
+    PlannedShot shot(RenderPlan p, String id) =>
+        p.shots.firstWhere((s) => s.shotId == id);
+
+    test('12 shots in s01..s12 order', () {
+      final p = plan();
+      expect(p.shots.length, 12);
+      expect(p.shots.map((s) => s.shotId).toList(), [
+        's01', 's02', 's03', 's04', 's05', 's06',
+        's07', 's08', 's09', 's10', 's11', 's12',
+      ]);
+    });
+
+    test('s01 speak_off passes framing/speaker/line/priority through', () {
+      final s01 = shot(plan(), 's01');
+      expect(s01.kind, ShotKind.speakOff);
+      expect(s01.framing, 'over_shoulder');
+      expect(s01.speaker, 'erniu');
+      expect(s01.line, '你欠我的，今天该还了。');
+      expect(s01.priority, ShotPriority.hook);
+    });
+
+    test('s04 action keeps empty line and turn priority', () {
+      final s04 = shot(plan(), 's04');
+      expect(s04.kind, ShotKind.action);
+      expect(s04.framing, 'medium');
+      expect(s04.speaker, 'erniu');
+      expect(s04.line, '');
+      expect(s04.priority, ShotPriority.turn);
+    });
+
+    test('s12 listen_face keeps payoff priority', () {
+      final s12 = shot(plan(), 's12');
+      expect(s12.kind, ShotKind.listenFace);
+      expect(s12.framing, 'close');
+      expect(s12.speaker, 'xiaoman');
+      expect(s12.line, '');
+      expect(s12.priority, ShotPriority.payoff);
+    });
+
+    test('s02 defaults to normal priority', () {
+      final s02 = shot(plan(), 's02');
+      expect(s02.speaker, 'xiaoman');
+      expect(s02.priority, ShotPriority.normal);
+    });
+
+    test('toJson key order and wire values', () {
+      final json = shot(plan(), 's01').toJson();
+      expect(json.keys.toList(), [
+        'shot_id',
+        'kind',
+        'route',
+        'avatar',
+        'duration_s',
+        'i2v_seconds',
+        'cost_yuan',
+        'downgrade_reason',
+        'framing',
+        'speaker',
+        'line',
+        'priority',
+      ]);
+      expect(json['framing'], 'over_shoulder');
+      expect(json['speaker'], 'erniu');
+      expect(json['line'], '你欠我的，今天该还了。');
+      expect(json['priority'], 'hook');
+    });
+
+    test('toJson keeps speaker null when the shot has none', () {
+      final json = shot(plan(), 's03').toJson();
+      expect(json['framing'], 'close_up');
+      expect(json.containsKey('speaker'), isTrue);
+      expect(json['speaker'], isNull);
+      expect(json['line'], '');
+      expect(json['priority'], 'normal');
     });
   });
 

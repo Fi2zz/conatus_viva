@@ -68,6 +68,9 @@ double resolveDuration(Shot shot, List<String> warnings) {
 }
 
 /// 单个镜头的计划结果。
+///
+/// `framing` / `speaker` / `line` / `priority` 是从 [Storyboard] 的 [Shot]
+/// 原样透传的 UI 展示字段（不参与路由、预算与计费计算）。
 class PlannedShot {
   const PlannedShot({
     required this.shotId,
@@ -77,6 +80,10 @@ class PlannedShot {
     required this.durationS,
     required this.i2vSeconds,
     required this.costYuan,
+    required this.framing,
+    this.speaker,
+    required this.line,
+    required this.priority,
     this.downgradeReason,
   });
 
@@ -89,6 +96,18 @@ class PlannedShot {
   final double costYuan;
   final String? downgradeReason;
 
+  /// 景别，解析阶段缺省为 `unknown`。
+  final String framing;
+
+  /// 发言角色 id；无发言角色时为 null。
+  final String? speaker;
+
+  /// 台词，允许空串。
+  final String line;
+
+  /// 镜头优先级；wire name 见 [shotPriorityToWire]。
+  final ShotPriority priority;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'shot_id': shotId,
     'kind': shotKindToWire(kind),
@@ -98,6 +117,10 @@ class PlannedShot {
     'i2v_seconds': i2vSeconds,
     'cost_yuan': costYuan,
     'downgrade_reason': downgradeReason,
+    'framing': framing,
+    'speaker': speaker,
+    'line': line,
+    'priority': shotPriorityToWire(priority),
   };
 }
 
@@ -282,6 +305,10 @@ RenderPlan buildRenderPlan({
         durationS: d,
         i2vSeconds: i2vSeconds,
         costYuan: cost,
+        framing: shot.framing,
+        speaker: shot.speaker,
+        line: shot.line,
+        priority: shot.priority,
         downgradeReason: downgraded.contains(shot.id)
             ? 'budget_insufficient'
             : null,
