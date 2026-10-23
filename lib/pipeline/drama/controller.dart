@@ -471,7 +471,11 @@ class DramaController {
     DramaEpisode episode,
     Storyboard board,
   ) {
-    final plan = buildDramaPlan(storyboard: board, episode: episode);
+    final plan = buildDramaPlan(
+      storyboard: board,
+      episode: episode,
+      priceYuanPerSecond: priceYuanPerSecond,
+    );
     store.writePlanJson(seriesId, episodeId, plan.toJson());
     final state = store
         .readState(seriesId, episodeId)

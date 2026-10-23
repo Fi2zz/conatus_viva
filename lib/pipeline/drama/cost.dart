@@ -27,9 +27,11 @@ double defaultDramaI2vPriceYuanPerSecond() {
 RenderPlan buildDramaPlan({
   required Storyboard storyboard,
   required DramaEpisode episode,
+  double? priceYuanPerSecond,
 }) => buildRenderPlan(
   storyboard: storyboard,
-  priceYuanPerSecond: defaultDramaI2vPriceYuanPerSecond(),
+  priceYuanPerSecond:
+      priceYuanPerSecond ?? defaultDramaI2vPriceYuanPerSecond(),
   budgetYuan: episode.settings.i2vBudgetYuan,
   maxI2vSeconds: episode.settings.maxI2vSeconds,
 );
