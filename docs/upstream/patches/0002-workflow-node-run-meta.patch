@@ -1,0 +1,499 @@
+diff --git a/packages/conatus_workflow/lib/src/node.dart b/packages/conatus_workflow/lib/src/node.dart
+--- a/packages/conatus_workflow/lib/src/node.dart
++++ b/packages/conatus_workflow/lib/src/node.dart
+@@ -2,9 +2,10 @@
+ ///
+ /// [WorkflowNode] 是 sealed 基类，三种节点 —— [ToolNode]（调用已注册
+ /// 工具）/ [AgentNode]（创建团队成员执行任务）/ [SubWorkflowNode]
+-/// （调用另一个流程）—— 共享 `id` / `dependsOn` / `when`。JSON 序列化
+-/// 用 `type` 字段区分节点种类，反序列化按 [WorkflowNode.fromJson] 分派。
+-/// `{{nodeId.output}}` 形式的引用只作为字符串原样保存，解析是引擎的职责。
++/// （调用另一个流程）—— 共享 `id` / `dependsOn` / `when` / `label` /
++/// `metadata`。JSON 序列化用 `type` 字段区分节点种类，反序列化按
++/// [WorkflowNode.fromJson] 分派。`{{nodeId.output}}` 形式的引用只作为
++/// 字符串原样保存，解析是引擎的职责。
+ library;
+ 
+ import 'errors.dart';
+@@ -18,11 +19,22 @@
+   'subworkflow': SubWorkflowNode.fromJson,
+ };
+ 
++/// 节点公共字段的 JSON 投影；子类 `toJson` 先摊平再补自身字段。
++Map<String, Object?> _nodeBaseJson(WorkflowNode node) => <String, Object?>{
++      'id': node.id,
++      'dependsOn': node.dependsOn,
++      'when': node.when,
++      if (node.label != null) 'label': node.label,
++      if (node.metadata.isNotEmpty) 'metadata': node.metadata,
++    };
++
+ /// 流程节点。三种类型：tool / agent / subworkflow。
+ sealed class WorkflowNode {
+   const WorkflowNode({
+     required this.id,
+     required this.dependsOn,
++    this.label,
++    this.metadata = const <String, Object?>{},
+     this.when,
+   });
+ 
+@@ -32,6 +44,12 @@
+   /// 依赖哪些节点。全部完成才能执行。
+   final List<String> dependsOn;
+ 
++  /// 展示标签（如「生成报告」）；缺省为 null，宿主可回退到 [id]。
++  final String? label;
++
++  /// 节点级元数据（分组、UI 提示、成本上限提示等）；引擎不解释其内容。
++  final Map<String, Object?> metadata;
++
+   /// 条件表达式。为 null 时无条件执行。
+   /// 表达式只能引用已完成节点的输出。
+   final String? when;
+@@ -56,6 +74,8 @@
+     required super.dependsOn,
+     required this.tool,
+     this.arguments = const <String, Object?>{},
++    super.label,
++    super.metadata,
+     super.when,
+   });
+ 
+@@ -68,9 +88,7 @@
+   @override
+   Map<String, Object?> toJson() => <String, Object?>{
+         'type': 'tool',
+-        'id': id,
+-        'dependsOn': dependsOn,
+-        'when': when,
++        ..._nodeBaseJson(this),
+         'tool': tool,
+         'arguments': arguments,
+       };
+@@ -80,6 +98,8 @@
+         dependsOn: requiredStringList(json, 'dependsOn'),
+         tool: requiredString(json, 'tool'),
+         arguments: optionalStringMap(json, 'arguments'),
++        label: optionalString(json, 'label'),
++        metadata: optionalStringMap(json, 'metadata'),
+         when: optionalString(json, 'when'),
+       );
+ }
+@@ -93,6 +113,8 @@
+     this.name,
+     this.tools,
+     this.systemPrompt,
++    super.label,
++    super.metadata,
+     super.when,
+   });
+ 
+@@ -111,9 +133,7 @@
+   @override
+   Map<String, Object?> toJson() => <String, Object?>{
+         'type': 'agent',
+-        'id': id,
+-        'dependsOn': dependsOn,
+-        'when': when,
++        ..._nodeBaseJson(this),
+         'task': task,
+         'name': name,
+         'tools': tools,
+@@ -127,6 +147,8 @@
+         name: optionalString(json, 'name'),
+         tools: nullableStringList(json, 'tools'),
+         systemPrompt: optionalString(json, 'systemPrompt'),
++        label: optionalString(json, 'label'),
++        metadata: optionalStringMap(json, 'metadata'),
+         when: optionalString(json, 'when'),
+       );
+ }
+@@ -138,6 +160,8 @@
+     required super.dependsOn,
+     required this.workflow,
+     this.inputs = const <String, Object?>{},
++    super.label,
++    super.metadata,
+     super.when,
+   });
+ 
+@@ -150,9 +174,7 @@
+   @override
+   Map<String, Object?> toJson() => <String, Object?>{
+         'type': 'subworkflow',
+-        'id': id,
+-        'dependsOn': dependsOn,
+-        'when': when,
++        ..._nodeBaseJson(this),
+         'workflow': workflow,
+         'inputs': inputs,
+       };
+@@ -163,6 +185,8 @@
+         dependsOn: requiredStringList(json, 'dependsOn'),
+         workflow: requiredString(json, 'workflow'),
+         inputs: optionalStringMap(json, 'inputs'),
++        label: optionalString(json, 'label'),
++        metadata: optionalStringMap(json, 'metadata'),
+         when: optionalString(json, 'when'),
+       );
+ }
+diff --git a/packages/conatus_workflow/lib/src/run_node.dart b/packages/conatus_workflow/lib/src/run_node.dart
+--- a/packages/conatus_workflow/lib/src/run_node.dart
++++ b/packages/conatus_workflow/lib/src/run_node.dart
+@@ -16,6 +16,7 @@
+     required this.inputs,
+     this.outputs,
+     this.error,
++    this.meta = const <String, Object?>{},
+     this.startedAt,
+     this.finishedAt,
+     this.attempts = 0,
+@@ -29,6 +30,11 @@
+   final Map<String, Object?> inputs;
+   final Object? outputs;
+   final Object? error;
++
++  /// 运行期元数据（成本、缓存键、产物指纹等）；由执行器经
++  /// `WorkflowEngine.recordNodeMeta` 写入，不改变节点状态。
++  final Map<String, Object?> meta;
++
+   final DateTime? startedAt;
+   final DateTime? finishedAt;
+   final int attempts;
+@@ -39,12 +45,13 @@
+     return (finishedAt ?? DateTime.now()).difference(startedAt!);
+   }
+ 
+-  /// 返回更新后的副本；[outputs] / [error] / [startedAt] / [finishedAt]
+-  /// 传 null 表示清除。
++  /// 返回更新后的副本；[outputs] / [error] / [meta] / [startedAt] /
++  /// [finishedAt] 传 null 表示清除。
+   RunNode copyWith({
+     RunNodeStatus? status,
+     Object? outputs = _unset,
+     Object? error = _unset,
++    Object? meta = _unset,
+     Object? startedAt = _unset,
+     Object? finishedAt = _unset,
+     int? attempts,
+@@ -55,6 +62,11 @@
+       inputs: inputs,
+       outputs: identical(outputs, _unset) ? this.outputs : outputs,
+       error: identical(error, _unset) ? this.error : error,
++      meta: identical(meta, _unset)
++          ? this.meta
++          : <String, Object?>{
++              if (meta is Map) ...Map<String, Object?>.from(meta),
++            },
+       startedAt: identical(startedAt, _unset)
+           ? this.startedAt
+           : startedAt as DateTime?,
+@@ -71,6 +83,7 @@
+         'inputs': inputs,
+         'outputs': outputs,
+         'error': error,
++        'meta': meta,
+         'startedAt': startedAt?.toIso8601String(),
+         'finishedAt': finishedAt?.toIso8601String(),
+         'attempts': attempts,
+@@ -83,6 +96,7 @@
+         inputs: requiredStringMap(json, 'inputs'),
+         outputs: json['outputs'],
+         error: json['error'],
++        meta: optionalStringMap(json, 'meta'),
+         startedAt: optionalDateTime(json, 'startedAt'),
+         finishedAt: optionalDateTime(json, 'finishedAt'),
+         attempts: json['attempts'] is int ? json['attempts'] as int : 0,
+diff --git a/packages/conatus_workflow/lib/src/engine.dart b/packages/conatus_workflow/lib/src/engine.dart
+--- a/packages/conatus_workflow/lib/src/engine.dart
++++ b/packages/conatus_workflow/lib/src/engine.dart
+@@ -53,6 +53,16 @@
+   /// 重跑指定节点。级联重置下游节点。
+   Future<WorkflowRun> rerun(String runId, String nodeId);
+ 
++  /// 记录节点运行期元数据（如成本、缓存键、产物指纹）。
++  ///
++  /// 缺省实现为空操作，自定义引擎可覆盖以持久化；不改变节点状态，
++  /// 对未知运行 / 节点静默忽略。
++  Future<void> recordNodeMeta(
++    String runId,
++    String nodeId,
++    Map<String, Object?> meta,
++  ) async {}
++
+   /// 取消运行。
+   Future<void> cancel(String runId);
+ 
+diff --git a/packages/conatus_workflow/lib/src/engine_impl.dart b/packages/conatus_workflow/lib/src/engine_impl.dart
+--- a/packages/conatus_workflow/lib/src/engine_impl.dart
++++ b/packages/conatus_workflow/lib/src/engine_impl.dart
+@@ -108,6 +108,25 @@
+   List<WorkflowRun> get runs => _runs.values.toList(growable: false);
+ 
+   @override
++  Future<void> recordNodeMeta(
++    String runId,
++    String nodeId,
++    Map<String, Object?> meta,
++  ) async {
++    final run = _runs[runId];
++    final node = run?.nodes[nodeId];
++    if (run == null || node == null || meta.isEmpty) return;
++    final updated = run.copyWith(
++      nodes: <String, RunNode>{
++        ...run.nodes,
++        nodeId: node.copyWith(meta: <String, Object?>{...node.meta, ...meta}),
++      },
++    );
++    _runs[runId] = updated;
++    await _store.saveRun(updated);
++  }
++
++  @override
+   Future<void> pause(String runId) async {
+     final current = _runs[runId];
+     if (current == null || current.status != RunStatus.running) return;
+diff --git a/packages/conatus_workflow/lib/src/executor.dart b/packages/conatus_workflow/lib/src/executor.dart
+--- a/packages/conatus_workflow/lib/src/executor.dart
++++ b/packages/conatus_workflow/lib/src/executor.dart
+@@ -28,7 +28,7 @@
+ }) {
+   return (WorkflowNode node, WorkflowRun run) {
+     return switch (node) {
+-      ToolNode() => _runTool(tools, node, run),
++      ToolNode() => _runTool(tools, node, run, engineOf),
+       AgentNode() => _runAgent(team, node),
+       SubWorkflowNode() => _runSubWorkflow(engineOf(), node, run, maxDepth),
+     };
+@@ -39,6 +39,7 @@
+   ToolRegistry tools,
+   ToolNode node,
+   WorkflowRun run,
++  WorkflowEngine Function() engineOf,
+ ) async {
+   if (tools.get(node.tool) == null) {
+     throw WorkflowException('unknown-tool', '未注册的工具: ${node.tool}');
+@@ -49,6 +50,9 @@
+       arguments: resolveArguments(node.arguments, run),
+     ),
+   );
++  if (result.meta.isNotEmpty) {
++    await engineOf().recordNodeMeta(run.id, node.id, result.meta);
++  }
+   if (result.isError) {
+     throw WorkflowException(
+       'tool-failed',
+diff --git a/packages/conatus_workflow/test/node_meta_test.dart b/packages/conatus_workflow/test/node_meta_test.dart
+new file mode 100644
+--- /dev/null
++++ b/packages/conatus_workflow/test/node_meta_test.dart
+@@ -0,0 +1,174 @@
++import 'package:conatus_foundation/conatus_foundation.dart';
++import 'package:conatus_team/conatus_team.dart';
++import 'package:conatus_workflow/conatus_workflow.dart';
++import 'package:test/test.dart';
++
++/// 返回带宿主元数据结果的工具替身。
++class _MetaTool extends Tool {
++  @override
++  String get name => 'meta_tool';
++
++  @override
++  String get description => '返回带宿主元数据的结果';
++
++  @override
++  Future<ToolResult> call(ToolContext context) async => ToolResult.success(
++        'ok',
++        value: 'ok',
++        meta: <String, Object?>{'cost': 0.8, 'cache': 'hit'},
++      );
++}
++
++/// 仅走工具节点，团队替身不参与。
++class _NoTeam implements AgentTeam {
++  @override
++  dynamic noSuchMethod(Invocation invocation) => null;
++}
++
++/// 轮询等待运行进入终态。
++Future<void> _waitTerminal(WorkflowEngine engine, String runId) async {
++  final deadline = DateTime.now().add(const Duration(seconds: 5));
++  while (!(engine.run(runId)?.status.isTerminal ?? false)) {
++    if (DateTime.now().isAfter(deadline)) fail('等待运行终态超时');
++    await Future<void>.delayed(const Duration(milliseconds: 5));
++  }
++}
++
++WorkflowEngine _engine(NodeExecutor executor) =>
++    WorkflowEngineImpl(executor: executor);
++
++void main() {
++  group('节点展示元数据', () {
++    test('label 与 metadata 随定义往返', () {
++      const ToolNode node = ToolNode(
++        id: 'report',
++        dependsOn: <String>[],
++        tool: 'render_report',
++        label: '生成报告',
++        metadata: <String, Object?>{'group': 'batch', 'cost_hint': 20},
++      );
++      final ToolNode back = ToolNode.fromJson(
++        Map<String, Object?>.from(node.toJson()),
++      );
++      expect(back.label, '生成报告');
++      expect(back.metadata['group'], 'batch');
++      expect(back.metadata['cost_hint'], 20);
++      expect(back.toJson()['label'], '生成报告');
++    });
++
++    test('未填 label / metadata 时不写入 JSON', () {
++      const ToolNode node = ToolNode(
++        id: 'a',
++        dependsOn: <String>[],
++        tool: 'noop',
++      );
++      expect(node.toJson().containsKey('label'), isFalse);
++      expect(node.toJson().containsKey('metadata'), isFalse);
++    });
++
++    test('Agent 与子流程节点同样携带展示元数据', () {
++      const AgentNode agent = AgentNode(
++        id: 'write',
++        dependsOn: <String>[],
++        task: '整理数据',
++        label: '汇总',
++        metadata: <String, Object?>{'group': 'analysis'},
++      );
++      const SubWorkflowNode sub = SubWorkflowNode(
++        id: 'sub',
++        dependsOn: <String>[],
++        workflow: 'summary',
++        label: '汇总流程',
++      );
++      final AgentNode agentBack = AgentNode.fromJson(
++        Map<String, Object?>.from(agent.toJson()),
++      );
++      final SubWorkflowNode subBack = SubWorkflowNode.fromJson(
++        Map<String, Object?>.from(sub.toJson()),
++      );
++      expect(agentBack.label, '汇总');
++      expect(agentBack.metadata['group'], 'analysis');
++      expect(subBack.label, '汇总流程');
++      expect(subBack.metadata, isEmpty);
++    });
++  });
++
++  group('RunNode.meta', () {
++    test('JSON 往返与 copyWith 保留 / 清空', () {
++      const RunNode node = RunNode(
++        id: 'report',
++        status: RunNodeStatus.completed,
++        inputs: <String, Object?>{},
++        meta: <String, Object?>{'cost': 1.2},
++      );
++      final RunNode back = RunNode.fromJson(
++        Map<String, Object?>.from(node.toJson()),
++      );
++      expect(back.meta['cost'], 1.2);
++
++      expect(node.copyWith(status: RunNodeStatus.running).meta, node.meta);
++      expect(node.copyWith(meta: null).meta, isEmpty);
++    });
++  });
++
++  group('元数据写入运行图', () {
++    test('工具节点的 ToolResult.meta 合并进 RunNode.meta', () async {
++      final ToolRegistry tools = ToolRegistry()..register(_MetaTool());
++      late WorkflowEngine engine;
++      final NodeExecutor executor = buildNodeExecutor(
++        engineOf: () => engine,
++        team: _NoTeam(),
++        tools: tools,
++      );
++      engine = _engine(executor);
++      await engine.register(
++        const WorkflowDefinition(
++          name: 'meta',
++          version: 1,
++          outputs: <String>['report'],
++          nodes: <WorkflowNode>[
++            ToolNode(id: 'report', dependsOn: <String>[], tool: 'meta_tool'),
++          ],
++        ),
++      );
++      final WorkflowRun run = await engine.start('meta');
++      await _waitTerminal(engine, run.id);
++
++      final RunNode node = engine.run(run.id)!.nodes['report']!;
++      expect(node.status, RunNodeStatus.completed);
++      expect(node.meta['cost'], 0.8);
++      expect(node.meta['cache'], 'hit');
++      engine.dispose();
++    });
++
++    test('recordNodeMeta 合并而非覆盖，未知节点静默忽略', () async {
++      final WorkflowEngine engine = _engine(
++        (node, run) async => 'out:${node.id}',
++      );
++      await engine.register(
++        const WorkflowDefinition(
++          name: 'chain',
++          version: 1,
++          outputs: <String>['a'],
++          nodes: <WorkflowNode>[
++            ToolNode(id: 'a', dependsOn: <String>[], tool: 'noop'),
++          ],
++        ),
++      );
++      final WorkflowRun run = await engine.start('chain');
++      await _waitTerminal(engine, run.id);
++
++      await engine.recordNodeMeta(run.id, 'a', <String, Object?>{'cost': 1});
++      await engine.recordNodeMeta(run.id, 'a', <String, Object?>{
++        'cache': 'hit',
++      });
++      await engine.recordNodeMeta(run.id, 'missing', <String, Object?>{'x': 1});
++
++      expect(engine.run(run.id)!.nodes['a']!.meta, <String, Object?>{
++        'cost': 1,
++        'cache': 'hit',
++      });
++      engine.dispose();
++    });
++  });
++}
+
+diff --git a/packages/conatus_workflow/README.md b/packages/conatus_workflow/README.md
+--- a/packages/conatus_workflow/README.md
++++ b/packages/conatus_workflow/README.md
+@@ -48,6 +48,14 @@
+   （`evaluateCondition`，基于可序列化状态求值——**确定性 guard**，不能依赖随机数 /
+   时间戳等不确定因素）。
+ 
++### 节点展示与运行期元数据
++
++- `WorkflowNode.label` / `metadata`：节点展示标签与宿主元数据（分组、UI 提示、
++  成本上限提示等）。引擎不解释内容，只随定义序列化；不填时不写入 JSON。
++- `RunNode.meta`：运行期元数据（成本、缓存键、产物指纹）。工具节点执行时，
++  `ToolResult.meta` 会被引擎合并进对应 `RunNode.meta` 并随运行图持久化；
++  也可用 `WorkflowEngine.recordNodeMeta(runId, nodeId, meta)` 主动补充。
++
+ ## 运行与状态机
+ 
+ - `WorkflowRun` / `RunNode`：每次 `start` 产生一次独立运行记录，运行图可序列化，
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -8,6 +8,11 @@
+ （成本、缓存键、产物指纹等，模型不可见）与 `withMeta` 合并辅助；缺省为空
+ map，既有构造调用与模型可见内容投影不变。
+ 
++**`conatus_workflow` 增量**：`WorkflowNode` 新增展示标签 `label` 与节点级
++`metadata`（引擎不解释内容，未填时不写入 JSON）；`RunNode` 新增运行期
++`meta`，工具节点执行时自动合并 `ToolResult.meta`，并新增
++`WorkflowEngine.recordNodeMeta` 供执行器主动补充。
++
+ **`conatus_agent` 增量**：Agent Loop 轮内注入缝——新增 `SteeringSource`
+ typedef 与 `AgentLoop.steering` 后置挂载字段（参照 `goalDriver` 惯例）；
+ step 循环组下一次模型请求前取回排队的用户插话，逐条写 `user/message`

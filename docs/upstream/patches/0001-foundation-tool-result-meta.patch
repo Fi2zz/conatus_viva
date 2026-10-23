@@ -1,0 +1,113 @@
+diff --git a/packages/conatus_foundation/lib/src/tool_types.dart b/packages/conatus_foundation/lib/src/tool_types.dart
+--- a/packages/conatus_foundation/lib/src/tool_types.dart
++++ b/packages/conatus_foundation/lib/src/tool_types.dart
+@@ -39,13 +39,22 @@
+ }
+ 
+ /// 一次工具调用的结局：成功携带规范值 [value]，失败携带 [error]。
++///
++/// [meta] 是宿主侧元数据（成本、缓存键、产物指纹等）：它不进模型可见的
++/// 内容投影，由中间件、调度器或编排引擎自行解释；缺省为空。
+ class ToolResult {
+-  ToolResult.success(this.content, {this.value})
+-      : isError = false,
++  ToolResult.success(
++    this.content, {
++    this.value,
++    this.meta = const <String, Object?>{},
++  })  : isError = false,
+         error = null;
+ 
+-  ToolResult.failure(this.content, {this.error})
+-      : isError = true,
++  ToolResult.failure(
++    this.content, {
++    this.error,
++    this.meta = const <String, Object?>{},
++  })  : isError = true,
+         value = null;
+ 
+   /// 是否失败。
+@@ -60,6 +69,18 @@
+   /// 失败详情；成功时为 null。
+   final ToolError? error;
+ 
++  /// 宿主侧元数据；模型不可见，缺省为空。
++  final Map<String, Object?> meta;
++
++  /// 复制一份并合并 [extra]（同名键以 [extra] 为准）；内容与状态不变。
++  ToolResult withMeta(Map<String, Object?> extra) {
++    final Map<String, Object?> merged = <String, Object?>{...meta, ...extra};
++    if (isError) {
++      return ToolResult.failure(content, error: error, meta: merged);
++    }
++    return ToolResult.success(content, value: value, meta: merged);
++  }
++
+   @override
+   String toString() =>
+       isError ? 'ToolResult.failure(${error?.code})' : 'ToolResult.success';
+diff --git a/packages/conatus_foundation/test/tool_result_meta_test.dart b/packages/conatus_foundation/test/tool_result_meta_test.dart
+new file mode 100644
+--- /dev/null
++++ b/packages/conatus_foundation/test/tool_result_meta_test.dart
+@@ -0,0 +1,45 @@
++import 'package:conatus_foundation/conatus_foundation.dart';
++import 'package:test/test.dart';
++
++void main() {
++  group('ToolResult.meta', () {
++    test('缺省为空，不影响既有字段', () {
++      final ToolResult result = ToolResult.success('ok', value: 42);
++      expect(result.meta, isEmpty);
++      expect(result.value, 42);
++      expect(result.isError, isFalse);
++    });
++
++    test('构造时携带元数据', () {
++      final ToolResult result = ToolResult.success(
++        'ok',
++        meta: <String, Object?>{'cost': 0.8, 'cache': 'hit'},
++      );
++      expect(result.meta['cost'], 0.8);
++      expect(result.meta['cache'], 'hit');
++    });
++
++    test('withMeta 合并而不丢失原有键', () {
++      final ToolResult merged = ToolResult.success(
++        'ok',
++        meta: <String, Object?>{'cost': 0.8},
++      ).withMeta(<String, Object?>{'cache': 'hit'});
++      expect(merged.meta, <String, Object?>{
++        'cost': 0.8,
++        'cache': 'hit',
++      });
++      expect(merged.content, 'ok');
++    });
++
++    test('withMeta 同名键以新增值为准，失败结果同样可合并', () {
++      final ToolResult failed = ToolResult.failure(
++        'bad',
++        error: const ToolError('E', 'bad'),
++        meta: <String, Object?>{'billed': 0.2},
++      ).withMeta(<String, Object?>{'billed': 0.3});
++      expect(failed.meta['billed'], 0.3);
++      expect(failed.isError, isTrue);
++      expect(failed.error?.code, 'E');
++    });
++  });
++}
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,10 @@
+ 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+ 
+ ## [未发布]
++
++**`conatus_foundation` 增量**：`ToolResult` 新增宿主侧元数据 `meta`
++（成本、缓存键、产物指纹等，模型不可见）与 `withMeta` 合并辅助；缺省为空
++map，既有构造调用与模型可见内容投影不变。
+ 
+ **`conatus_agent` 增量**：Agent Loop 轮内注入缝——新增 `SteeringSource`
+ typedef 与 `AgentLoop.steering` 后置挂载字段（参照 `goalDriver` 惯例）；
