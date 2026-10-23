@@ -42,7 +42,7 @@
     `frontend/src/ShortDrama.tsx`。
   - 修改：`lib/pipeline/generation_models.dart`、`test/pipeline/generation_models_test.dart`、
     `test/server/video_api_test.dart`（Task 1）；`lib/server/api_router.dart`、`lib/server/pipeline_server.dart`、
-    `test/server/api_router_test.dart`（Task 5）；`frontend/src/App.tsx`（Task 6）。
+    `test/server/api_router_test.dart`、`Makefile`（Task 5）；`frontend/src/App.tsx`（Task 6）。
   - 生成物：`web_build/**`（Task 6 必须 `make web` 后提交，AGENTS 要求）。
   - 预置：`test/fixtures/ep07.storyboard.json`（已存在，勿改写）。
 - **`prototype/` 是设计基准**：可以照着做，不要改它，也不要把它的静态数据当成运行时真值。
@@ -54,7 +54,7 @@
   新增 tab 不得改变既有四个模式的行为。
 - 确定性：计划单输出不得含时间戳、随机数、绝对路径；同一输入两次执行逐字节一致。
 - 每个 Task 走 TDD：先写失败测试 → 跑失败 → 实现 → 跑通过 → `make analyze` / `npm run lint` 零告警 → 提交。
-- 收尾基线：`make analyze` 零告警、`dart test test/pipeline` 162 例全绿、`npm test` / `npm run lint` / `npm run build` 通过。
+- 收尾基线：`make analyze` 零告警、`make test-dart` 全绿（v2 后 pipeline 250 例，含新增端点测试）、`npm test` / `npm run lint` / `npm run build` 通过。
 
 ## Decisions（已定，不留 TBD）
 
@@ -185,7 +185,7 @@ double resolveDuration(Shot shot, List<String> warnings);   // 公开，供测�
 缺省:
     chars = shot.line.trim().runes.length
     if chars == 0: return 2.0
-    return round1(clamp(chars / 4.5, 1.2, 30.0))
+    return ceil1(clamp(chars / 4.5, 1.2, 30.0))
 ```
 
 ### 2.3 默认路由
@@ -393,20 +393,22 @@ class PlannerArgs {
 PlannerArgs? parsePlannerArgs(ArgResults results, ArgParser parser);
 
 double defaultI2vPriceYuanPerSecond();   // 目录价 → 0.15；目录缺失 throw StateError
+String plannerUsage(ArgParser parser);   // 顶层 usage + plan 子命令与选项
 String encodePlanJson(RenderPlan plan);  // pretty 2 空格 + '\n'
-Future<int> runPlan(PlannerArgs args, {String? outDir});  // 返回退出码
+Future<int> runPlan(PlannerArgs args, {String? outDir, StringSink? warningSink}); // 返回退出码
+Future<int> runCli(List<String> argv);   // main 只 exit(await runCli(argv))
 ```
 
 **契约**
 - `buildPlannerParser()` 必须 `addCommand('plan')`；`plan` 下注册 `storyboard`、`budget`、
-  `max-i2v-seconds`、`out`（**不提供 price 覆盖**）。
+  `max-i2v-seconds`、`out`（**不提供 price 覆盖**）；`plan` 子命令也支持 `-h/--help`。
 - `--storyboard` 不设 `mandatory`；缺失/空串 → stderr usage + null；无子命令同。
 - 数值 `double.tryParse` / `int.tryParse` + `isFinite` + 范围校验；不合法 null。
 - 单价固定 `defaultI2vPriceYuanPerSecond()`。
 - 输出路径：`args.outPath` 优先；否则 `${outDir ?? 'pipeline_out'}/${contentId}/07_plan.json`；递归建目录。
-- 退出码：成功 0；参数/用法 64；读/解析失败 65；写盘失败 74。
-- 成功时先写文件，再 `stdout.writeln(encodePlanJson(plan))`；warnings 逐条 `stderr.writeln('warn: …')`。
-- `main`：`FormatException` → usage + 64；`--help` → 0；其余 `runPlan` + `exit`。
+- 退出码：成功 0；参数/用法 64（含直接构造的非法 `PlannerArgs`）；读/解析失败 65；写盘失败 74。
+- 成功时先写文件，再 `stdout.write(encodePlanJson(plan))`；warnings 逐条写 `warningSink ?? stderr`（`warn: …`）。
+- `runCli`：`FormatException` → usage + 64；`--help` / `plan --help` → 0；其余 `runPlan`。`bin/short_drama.dart` 只 `exit(await runCli(argv))`。
 
 **TDD 步骤**
 - [ ] 写失败测试：无子命令 / 缺 storyboard / 空串 / `--budget 0`/NaN/Infinity /
@@ -414,7 +416,8 @@ Future<int> runPlan(PlannerArgs args, {String? outDir});  // 返回退出码
       `defaultI2vPriceYuanPerSecond()==0.15`；
       `runPlan`：fixture → 0、文件在 `temp/ep07/07_plan.json`、内容等于 `encodePlanJson(plan)`；
       `--out` 优先；文件不存在/JSON 语法错误/非法 schema → 65；输出路径是目录 → 74；
-      低预算时 stderr 含 `warn: no_i2v_budget`；`encodePlanJson` 以 `\n` 结尾且可 `jsonDecode` 还原。
+      低预算时 `warningSink` 含 `warn: no_i2v_budget`；`plannerUsage` 含 `plan` 与四个选项；
+      `encodePlanJson` 以 `\n` 结尾且可 `jsonDecode` 还原。
 - [ ] 跑红；实现；跑绿；`make analyze` 零告警。
 - [ ] 提交：`feat(short-drama): 计划单 CLI`
 
@@ -424,6 +427,7 @@ Future<int> runPlan(PlannerArgs args, {String? outDir});  // 返回退出码
 - Modify: `lib/server/api_router.dart`
 - Modify: `lib/server/pipeline_server.dart`
 - Modify: `test/server/api_router_test.dart`
+- Modify: `Makefile`（把新端点测试加入 `DART_TEST_CMD`，避免孤儿测试）
 - Create: `test/server/short_drama_api_test.dart`
 
 **接口与路由**
@@ -441,7 +445,10 @@ GET /api/short-drama/plans/<content_id>
   - `content_id` 不匹配 `^[A-Za-z0-9_-]+$` → 400 `{'error':'invalid content id'}`；
   - 读 `${plansDir ?? 'pipeline_out'}/<id>/07_plan.json`；不存在 → 404 `{'error':'plan not found'}`；
   - 成功 → 200，原样返回该 JSON（`_sendJson`，Map 形式）。
+  - `/api/short-drama/plans`（无尾斜杠）→ unknown；`/api/short-drama/plans/`（尾斜杠、空 id）→ 400。
+  - 计划文件非法 JSON / 非对象 → 500 `{'error':'invalid plan file'}`；缺文件 → 404。
 - `_handleApi` 增加 dispatch case。
+- 把 `test/server/short_drama_api_test.dart` 加入 `Makefile` 的 `DART_TEST_CMD`。
 
 **TDD 步骤**
 - [ ] 写失败测试（`api_router_test`）：GET 合法路径 → `getShortDramaPlan`；POST 同路径 → unknown；
@@ -478,7 +485,7 @@ export interface PlanShot {
 export interface Plan { /* content_id,title,frame,i2v_generation,budget_yuan,
   price_yuan_per_second,max_i2v_seconds,shots,totals,counts,warnings */ }
 
-export function hookShots(shots: PlanShot[], seconds?: number): PlanShot[]; // 累计到 >= seconds（含跨越镜）
+export function hookShots(shots: PlanShot[], seconds = 3): PlanShot[]; // 累计到 >= seconds（含跨越镜）
 export function timelineBlocks(shots: PlanShot[]): { shot: PlanShot; start: number; width: number }[];
 export function costByRoute(shots: PlanShot[]): Record<ShotRoute, number>;
 export function routeLabel(route: ShotRoute): string;   // 静帧推拉 / 局部微动 / 图生视频
@@ -495,7 +502,7 @@ export function formatSeconds(v: number): string;
   每块显示镜头号、route、`i2v_seconds`、`cost_yuan`；下方台词行（`line` 非空时）；
   点击选镜 → 右侧检视（kind/framing/speaker/line/route/duration/i2v/cost/downgrade_reason/avatar）；
   成本构成（按 route）；warnings 列表（无则显示「无」）。
-- **画布视图（设计预览）**：`pipelineDag.ts` 的 8 个工序节点静态布局 + 连线；仅「分镜」节点显示
+- **画布视图（设计预览）**：`pipelineDag.ts` 的 8 个工序节点（拆片/故事/定妆/分镜/画面/声音/剪辑/打包）静态布局 + 连线；仅「分镜」节点显示
   `${shots.length} 镜`、「画面」节点显示 `${counts.i2v} 镜 i2v · ¥cost`，其余显示「未接入」；
   顶部横幅「设计预览 · 工序状态未接入 conatus」；**不得编造状态/成本**。
 - 样式自包含于 `ShortDrama.css`；不引入新依赖；不使用 `window.confirm/alert`。
@@ -515,10 +522,10 @@ export function formatSeconds(v: number): string;
 ### Task 7: 收尾验收
 
 **Files**
-- Create: `test/fixtures/README.md`（一句话：计划单用例的输入样例）
+- Update: `test/fixtures/README.md`（已存在；补充只读说明与单行验收命令）
 
 **步骤**
-- [ ] 写 `test/fixtures/README.md`。
+- [ ] 更新 `test/fixtures/README.md`。
 - [ ] 跑 §4 全部命令，贴输出。
 - [ ] `git status --short` 只含预期路径；无关 untracked 保持原样；`web_build/` 变更已包含。
 - [ ] 提交：`docs(short-drama): 计划单夹具说明与验收记录`
@@ -595,7 +602,7 @@ git add lib/pipeline/generation_models.dart \
 - [ ] 画布视图有「设计预览」横幅，除「分镜/画面」外不显示编造状态（D-08）
 - [ ] 不新增依赖；不用 `print`；不用原生对话框；不新造异常类
 - [ ] 只修改 Global Constraints 列出的既有文件；无关 untracked 原样保留
-- [ ] 7 笔提交，与 Task 1–7 一一对应
+- [ ] 提交数与基线一致：v2 已合并 6 笔；本增量分支为 Task 3b/5/6/7 共 4 笔。若从零实现则 Task 1–7 共 7 笔。
 - [ ] PR 描述包含：§4 实际输出、`wan2.6-i2v-flash 720P / 0.15 / frame 1080x1920` 口径说明、
       UI 截图（有 GUI 时）、一句话「本 PR 不发真实生成请求，不碰 ffmpeg/conatus」
 
