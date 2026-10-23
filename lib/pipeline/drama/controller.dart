@@ -406,8 +406,16 @@ class DramaController {
     String seriesId,
     String episodeId,
   ) async {
+    final body = req.contentLength == 0 ? null : await _bodyOrError(req);
+    if (req.contentLength != 0 && body == null) return;
     final series = store.readSeries(seriesId);
-    final episode = store.readEpisode(seriesId, episodeId);
+    final stored = store.readEpisode(seriesId, episodeId);
+    final text = body == null ? null : optionalJsonString(body['text'], 'text');
+    final episode = text == null
+        ? stored
+        : stored.copyWith(
+            source: DramaSource(kind: stored.source.kind, text: text),
+          );
     final result = await drafts.extract(series: series, episode: episode);
     await _sendJson(req, HttpStatus.ok, result.toJson());
   }

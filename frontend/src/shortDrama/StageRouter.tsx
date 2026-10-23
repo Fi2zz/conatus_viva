@@ -19,19 +19,41 @@ export interface StageRouterProps {
 }
 
 export default function StageRouter(props: StageRouterProps) {
+  const { bundle, onBundle, onReload, onSelectShot } = props;
   switch (props.step) {
     case "split":
-      return <SplitStage bundle={props.bundle} />;
+      return (
+        <SplitStage
+          key={bundle.episode.episode_id}
+          bundle={bundle}
+          onBundle={onBundle}
+          onReload={onReload}
+        />
+      );
     case "story":
-      return <StoryStage bundle={props.bundle} />;
+      return (
+        <StoryStage
+          key={bundle.episode.episode_id}
+          bundle={bundle}
+          onReload={onReload}
+        />
+      );
     case "cast":
-      return <CastStage bundle={props.bundle} />;
+      return <CastStage bundle={bundle} />;
     case "board":
-      return <BoardStage bundle={props.bundle} />;
+      return (
+        <BoardStage
+          key={bundle.episode.episode_id}
+          bundle={bundle}
+          onBundle={onBundle}
+          onReload={onReload}
+          onSelectShot={(id) => onSelectShot(id)}
+        />
+      );
     case "frame":
-      return <FrameStage bundle={props.bundle} />;
+      return <FrameStage bundle={bundle} />;
     case "voice":
-      return <VoiceStage bundle={props.bundle} />;
+      return <VoiceStage bundle={bundle} />;
     case "edit":
       return <EditStage />;
     case "pack":
