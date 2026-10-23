@@ -130,9 +130,34 @@ describe("workbench smoke render", () => {
       renderToString(
         <WorkbenchShell
           bundle={bundle}
+          seriesList={[
+            {
+              series_id: "jietiao",
+              title: "借条",
+              logline: "一张旧借条",
+              dialect: "河南",
+              frame: "1080x1920",
+              content_type: "manju",
+              planned_episodes: 80,
+              defaults: {
+                total_budget_yuan: 120,
+                i2v_budget_yuan: 20,
+                max_i2v_seconds: 0,
+                cast_image_model: "wan2.7-image",
+                frame_image_model: "wan2.7-image",
+                clip_video_model: "wan2.6-i2v-flash",
+                t2v_model: "wan3.0-video",
+                resolution: "720P",
+              },
+              beat_template: [],
+              cast: {},
+              episode_count: 1,
+            },
+          ]}
           episodes={[{ episode_id: "ep07", number: 7, title: "堂屋对峙" }]}
           onBundle={noop}
           onReload={noop}
+          onSelectSeries={noop}
           onSelectEpisode={noop}
         />,
       ),

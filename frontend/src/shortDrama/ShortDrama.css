@@ -1653,3 +1653,76 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 剧集切换 / 新建弹层 ─────────────── */
+
+.sd-series-select {
+  padding: 3px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.sd-mini {
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.sd-mini:hover {
+  border-color: var(--accent);
+  color: #ff8a63;
+}
+
+.sd-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 4, 3, 0.76);
+  backdrop-filter: blur(3px);
+}
+
+.sd-modal-card {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.sd-modal-card .sd-entry {
+  padding: 0;
+}
+
+.sd-modal-card .sd-entry-card {
+  box-shadow: none;
+}
+
+.sd-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sd-modal-close:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}

@@ -144,9 +144,11 @@ export default function ShortDrama() {
   return (
     <WorkbenchShell
       bundle={bundle}
+      seriesList={seriesList}
       episodes={episodes}
       onBundle={setBundle}
       onReload={reload}
+      onSelectSeries={(id) => void loadAll(id)}
       onSelectEpisode={selectEpisode}
     />
   );

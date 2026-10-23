@@ -1,28 +1,36 @@
 /// 工作台顶栏：品牌、剧名、集选择、视图切换、预算与缓存。
-import type { DramaSeries, EpisodeSummary } from "./types";
+import type { DramaSeries, DramaSeriesSummary, EpisodeSummary } from "./types";
 import { budgetPercent } from "./view";
 import { formatYuan } from "./model";
 
 interface Props {
   series: DramaSeries;
+  seriesList: DramaSeriesSummary[];
   episodes: EpisodeSummary[];
   episodeId: string;
   view: "prod" | "canvas";
   actualYuan: number;
   totalYuan: number;
+  onSeriesChange: (id: string) => void;
   onEpisodeChange: (id: string) => void;
   onViewChange: (view: "prod" | "canvas") => void;
+  onCreateSeries: () => void;
+  onCreateEpisode: () => void;
 }
 
 export default function WorkbenchHeader({
   series,
+  seriesList,
   episodes,
   episodeId,
   view,
   actualYuan,
   totalYuan,
+  onSeriesChange,
   onEpisodeChange,
   onViewChange,
+  onCreateSeries,
+  onCreateEpisode,
 }: Props) {
   const pct = budgetPercent(actualYuan, totalYuan);
   return (
@@ -41,6 +49,28 @@ export default function WorkbenchHeader({
           竖屏 9:16 · {series.dialect} · {series.content_type} ·{" "}
           {series.planned_episodes} 集
         </span>
+        {seriesList.length > 1 && (
+          <select
+            className="sd-series-select"
+            value={series.series_id}
+            onChange={(event) => onSeriesChange(event.target.value)}
+            title="切换剧"
+          >
+            {seriesList.map((item) => (
+              <option key={item.series_id} value={item.series_id}>
+                {item.title}
+              </option>
+            ))}
+          </select>
+        )}
+        <button
+          type="button"
+          className="sd-mini"
+          onClick={onCreateSeries}
+          title="新建剧"
+        >
+          ＋剧
+        </button>
       </div>
 
       <label className="sd-ep">
@@ -55,6 +85,14 @@ export default function WorkbenchHeader({
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          className="sd-mini"
+          onClick={onCreateEpisode}
+          title="新建集"
+        >
+          ＋集
+        </button>
       </label>
 
       <div className="sd-seg" role="tablist" aria-label="视图切换">
