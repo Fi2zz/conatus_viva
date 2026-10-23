@@ -60,5 +60,17 @@ void main() {
         ApiRoute.unknown,
       );
     });
+
+    test('drama routes all methods go to the drama controller', () {
+      expect(apiRouteFor('GET', '/api/drama/series'), ApiRoute.drama);
+      expect(apiRouteFor('POST', '/api/drama/series'), ApiRoute.drama);
+      expect(apiRouteFor('PUT', '/api/drama/series/jietiao'), ApiRoute.drama);
+      expect(
+        apiRouteFor('POST', '/api/drama/series/jietiao/episodes/ep07/storyboard:draft'),
+        ApiRoute.drama,
+      );
+      expect(apiRouteFor('GET', '/api/drama'), ApiRoute.unknown);
+      expect(apiRouteFor('GET', '/api/dramaX/series'), ApiRoute.unknown);
+    });
   });
 }

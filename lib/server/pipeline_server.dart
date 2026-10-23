@@ -6,6 +6,10 @@ import 'package:flutter_wanxiang/pipeline/bailian/image_client.dart';
 import 'package:flutter_wanxiang/pipeline/bailian/wan30_video.dart';
 import 'package:flutter_wanxiang/pipeline/config.dart';
 import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
+import 'package:flutter_wanxiang/pipeline/drama/controller.dart';
+import 'package:flutter_wanxiang/pipeline/drama/cost.dart';
+import 'package:flutter_wanxiang/pipeline/drama/llm.dart';
+import 'package:flutter_wanxiang/pipeline/drama/store.dart';
 import 'package:flutter_wanxiang/pipeline/edit_models.dart';
 import 'package:flutter_wanxiang/pipeline/errors.dart';
 import 'package:flutter_wanxiang/pipeline/generation_models.dart';
@@ -207,9 +211,21 @@ class PipelineServer {
     this.imagesOutputDir,
     this.videosOutputDir,
     this.plansDir,
+    this.dramaController,
+    this.dramaRoot,
+    this.dramaLlm,
   }) : _runs = <String, RunRecord>{},
        _imageJobs = <String, JobRunRecord>{},
-       _videoJobs = <String, JobRunRecord>{};
+       _videoJobs = <String, JobRunRecord>{},
+       _drama =
+           dramaController ??
+           DramaController(
+             store: DramaStore(rootDir: dramaRoot ?? 'pipeline_out/drama'),
+             drafts: DramaDraftService(
+               llm: dramaLlm ?? QwenDramaLlm(cfg: cfg),
+             ),
+             priceYuanPerSecond: defaultDramaI2vPriceYuanPerSecond(),
+           );
 
   final PipelineConfig cfg;
   final Directory staticDir;
@@ -242,6 +258,17 @@ class PipelineServer {
 
   /// 短剧计划单根目录；null → `pipeline_out`（相对 CWD）。测试 seam。
   final String? plansDir;
+
+  /// 短剧工作台 controller；测试注入 fake LLM / temp store。
+  final DramaController? dramaController;
+
+  /// 剧集存储根目录；null → `pipeline_out/drama`。
+  final String? dramaRoot;
+
+  /// 测试 seam：替换真实 LLM。
+  final DramaLlm? dramaLlm;
+
+  final DramaController _drama;
 
   final Map<String, RunRecord> _runs;
   final Map<String, JobRunRecord> _imageJobs;
@@ -308,6 +335,8 @@ class PipelineServer {
         await _getVideoFile(req);
       case ApiRoute.getShortDramaPlan:
         await _getShortDramaPlan(req);
+      case ApiRoute.drama:
+        await _drama.handle(req);
       case ApiRoute.unknown:
         _sendJson(req, HttpStatus.notFound, <String, dynamic>{
           'error': 'not found',
