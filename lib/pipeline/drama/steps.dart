@@ -256,13 +256,17 @@ List<DramaStepView> deriveDramaSteps({
 
   DramaStatus effective(DramaStep step) {
     final run = state.steps[dramaStepKey(step)];
+    if (run != null && run.status == DramaStatus.running) {
+      return DramaStatus.running;
+    }
+    final next = derived(step);
+    if (next == DramaStatus.succeeded) return next;
     if (run != null &&
-        (run.status == DramaStatus.running ||
-            run.status == DramaStatus.failed ||
+        (run.status == DramaStatus.failed ||
             run.status == DramaStatus.interrupted)) {
       return run.status;
     }
-    return derived(step);
+    return next;
   }
 
   String summary(DramaStep step) {

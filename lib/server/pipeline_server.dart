@@ -581,7 +581,7 @@ class PipelineServer {
       record.logs.add('失败：${e.message}');
     } on ConfigException catch (e) {
       record.status = 'failed';
-      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+      record.error = '未配置 DASHSCOPE_API_KEY：请在「设置」中填写后重试'
           '（${e.message}）';
       record.logs.add('失败：${record.error}');
     } catch (e) {
@@ -649,7 +649,7 @@ class PipelineServer {
       record.logs.add('失败：${e.message}');
     } on ConfigException catch (e) {
       record.status = 'failed';
-      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+      record.error = '未配置 DASHSCOPE_API_KEY：请在「设置」中填写后重试'
           '（${e.message}）';
       record.logs.add('失败：${record.error}');
     } catch (e) {
@@ -934,7 +934,7 @@ class PipelineServer {
       record.logs.add('失败：${e.message}');
     } on ConfigException catch (e) {
       record.status = 'failed';
-      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+      record.error = '未配置 DASHSCOPE_API_KEY：请在「设置」中填写后重试'
           '（${e.message}）';
       record.logs.add('失败：${record.error}');
     } catch (e) {
@@ -1158,7 +1158,7 @@ class PipelineServer {
       record.logs.add('失败：${e.message}');
     } on ConfigException catch (e) {
       record.status = 'failed';
-      record.error = '未配置 DASHSCOPE_API_KEY：请设置环境变量 DASHSCOPE_API_KEY 后重试'
+      record.error = '未配置 DASHSCOPE_API_KEY：请在「设置」中填写后重试'
           '（${e.message}）';
       record.logs.add('失败：${record.error}');
     } catch (e) {

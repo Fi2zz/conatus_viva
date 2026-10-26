@@ -111,7 +111,7 @@ void main() {
     expect(find(steps, DramaStep.split).status, DramaStatus.pending);
   });
 
-  test('failed state overrides derived success', () {
+  test('failed state does not mask a derived success', () {
     final s = series();
     final episode = DramaEpisode.create(series: s, episodeId: 'ep07', title: 'x').copyWith(
       source: const DramaSource(kind: 'story', text: '文本'),
@@ -121,6 +121,28 @@ void main() {
         beats: const <DramaBeat>[DramaBeat(id: 'hook', label: '钩子', summary: '')],
         sourceHash: dramaHash(<String, Object?>{'text': '文本'}),
       ),
+    );
+    final state = DramaEpisodeState.empty('jietiao', 'ep07').withStep(
+      'split',
+      DramaStepRun(status: DramaStatus.failed, error: 'boom'),
+    );
+    final steps = deriveDramaSteps(
+      series: s,
+      episode: episode,
+      storyboard: null,
+      planJson: null,
+      state: state,
+      wired: kP1WiredSteps,
+    );
+    expect(find(steps, DramaStep.split).status, DramaStatus.succeeded);
+  });
+
+  test('failed state still shows when nothing was derived', () {
+    final s = series();
+    final episode = DramaEpisode.create(
+      series: s,
+      episodeId: 'ep07',
+      title: 'x',
     );
     final state = DramaEpisodeState.empty('jietiao', 'ep07').withStep(
       'split',

@@ -276,7 +276,7 @@ void main() {
       final id = await _createId(s, '河南美食');
       final body = await _poll(s, id);
       expect(body['status'], 'failed');
-      expect(body['error'], contains('请设置环境变量'));
+      expect(body['error'], contains('请在「设置」中填写'));
       expect(body.containsKey('video_path'), isFalse);
     } finally {
       await s.stop();
