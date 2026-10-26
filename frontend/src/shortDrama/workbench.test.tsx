@@ -4,6 +4,7 @@ import StageRouter from "./StageRouter";
 import CanvasView from "./CanvasView";
 import WorkbenchShell from "./WorkbenchShell";
 import CastStage from "./stages/CastStage";
+import FrameStage from "./stages/FrameStage";
 import { STEP_ORDER } from "./view";
 import type { EpisodeBundle, StepView } from "./types";
 
@@ -137,8 +138,58 @@ describe("workbench smoke render", () => {
     expect(html).toContain("/api/drama/series/jietiao/assets/cast/erniu/hash/image-01.png");
   });
 
-  it("renders every stage without crashing", () => {
-    for (const step of STEP_ORDER) {
+  it("frame stage renders timeline and per-shot actions", () => {
+    const withArtifacts: EpisodeBundle = {
+      ...bundle,
+      state: {
+        ...bundle.state,
+        shots: {
+          s01: {
+            frame: {
+              status: "succeeded",
+              path: "assets/frames/s01/hash/image-01.png",
+              source_hash: "sha256:frame",
+              model: "wan2.7-image",
+              cost_yuan: 0.2,
+              duration_s: null,
+              error: null,
+            },
+            clip: {
+              status: "running",
+              path: null,
+              source_hash: null,
+              model: null,
+              cost_yuan: null,
+              duration_s: null,
+              error: null,
+            },
+            audio: {
+              status: "pending",
+              path: null,
+              source_hash: null,
+              model: null,
+              cost_yuan: null,
+              duration_s: null,
+              error: null,
+            },
+          },
+        },
+      },
+    };
+    const html = renderToString(
+      <FrameStage
+        bundle={withArtifacts}
+        selectedShotId="s01"
+        onSelectShot={noop}
+        onReload={noop}
+      />,
+    );
+    expect(html).toContain("生成全部首帧");
+    expect(html).toContain("降级为静帧");
+    expect(html).toContain("assets/frames/s01/hash/image-01.png");
+  });
+
+  it("renders every stage without crashing", () => {    for (const step of STEP_ORDER) {
       const html = renderToString(
         <StageRouter
           step={step}

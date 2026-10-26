@@ -22,7 +22,10 @@ export default function DramaCostGate({
   const needsAck = estimate.unpriced.length > 0;
   const overBudget =
     estimate.total_estimated_yuan > estimate.budget.remaining_yuan;
-  const disabled = busy || overBudget || (needsAck && !ack);
+  const overI2v =
+    estimate.budget.i2v_total_yuan > 0 &&
+    estimate.i2v_estimated_yuan > estimate.budget.i2v_remaining_yuan;
+  const disabled = busy || overBudget || overI2v || (needsAck && !ack);
 
   return (
     <div className="sd-gate" role="dialog" aria-modal="true">
@@ -87,9 +90,18 @@ export default function DramaCostGate({
             预算剩余 {formatYuan(estimate.budget.remaining_yuan)} /{" "}
             {formatYuan(estimate.budget.total_yuan)}
           </span>
+          {estimate.budget.i2v_total_yuan > 0 && (
+            <span>
+              i2v 剩余 {formatYuan(estimate.budget.i2v_remaining_yuan)} /{" "}
+              {formatYuan(estimate.budget.i2v_total_yuan)}
+            </span>
+          )}
         </div>
         {overBudget && (
           <div className="sd-alert">估算超过剩余预算，请提高预算或减少任务。</div>
+        )}
+        {overI2v && (
+          <div className="sd-alert">i2v 估算超过剩余 i2v 预算，请减少镜头。</div>
         )}
 
         <div className="sd-gate-actions">

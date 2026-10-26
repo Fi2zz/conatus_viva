@@ -1769,3 +1769,41 @@
   max-height: 160px;
   overflow: auto;
 }
+
+/* ── 画面时间轴 / 检视预览 ─────────────── */
+
+.sd-shot-thumb {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  margin-bottom: 6px;
+}
+
+.sd-shot-thumb.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.sd-clip-player,
+.sd-insp-video {
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: #000;
+  max-height: 420px;
+}
+
+.sd-frame-img {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  max-height: 320px;
+}

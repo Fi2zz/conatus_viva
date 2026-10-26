@@ -44,6 +44,10 @@ export default function WorkbenchShell({
       : (shots[0]?.id ?? null);
   const selectedShot =
     shots.find((shot) => shot.id === effectiveShotId) ?? null;
+  const selectedShotState =
+    selectedShot === null
+      ? null
+      : (bundle.state.shots[selectedShot.id] ?? null);
   const planShot =
     bundle.plan?.shots.find((shot) => shot.shot_id === selectedShot?.id) ?? null;
   const stepView = findStep(bundle.steps, step) ?? {
@@ -95,7 +99,14 @@ export default function WorkbenchShell({
             }}
           />
         )}
-        <Inspector step={stepView} shot={selectedShot} planShot={planShot} />
+        <Inspector
+          step={stepView}
+          shot={selectedShot}
+          planShot={planShot}
+          shotState={selectedShotState}
+          seriesId={bundle.series.series_id}
+          episodeId={bundle.episode.episode_id}
+        />
       </main>
       <FooterMeters
         actualYuan={bundle.state.cost.actual_yuan}

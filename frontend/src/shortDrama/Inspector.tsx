@@ -1,7 +1,8 @@
 /// 右栏检视：选中镜头或工序的真实数据；P1 不提供伪造的运行状态。
 import type { PlanShot, ShotKind } from "./model";
 import { formatSeconds, formatYuan, routeLabel } from "./model";
-import type { StoryboardShot, StepView } from "./types";
+import { episodeAssetUrl } from "./asset";
+import type { DramaShotState, StoryboardShot, StepView } from "./types";
 import { stepStatusLabel } from "./view";
 
 const KIND_LABELS: Record<ShotKind, string> = {
@@ -16,9 +17,23 @@ interface Props {
   step: StepView;
   shot: StoryboardShot | null;
   planShot: PlanShot | null;
+  shotState: DramaShotState | null;
+  seriesId: string;
+  episodeId: string;
 }
 
-export default function Inspector({ step, shot, planShot }: Props) {
+export default function Inspector({
+  step,
+  shot,
+  planShot,
+  shotState,
+  seriesId,
+  episodeId,
+}: Props) {
+  const asset = (path: string | null | undefined): string | null =>
+    path === null || path === undefined
+      ? null
+      : episodeAssetUrl(seriesId, episodeId, path);
   return (
     <aside className="sd-inspector">
       <div className="sd-insp-head">
@@ -29,10 +44,18 @@ export default function Inspector({ step, shot, planShot }: Props) {
       {shot ? (
         <>
           <div className="sd-insp-preview">
-            <div className="sd-frame">
-              <span>首帧</span>
-              <small>{shot.framing} · 9:16</small>
-            </div>
+            {shotState?.frame.path ? (
+              <img
+                className="sd-frame-img"
+                src={asset(shotState.frame.path) ?? ""}
+                alt={`${shot.id} 首帧`}
+              />
+            ) : (
+              <div className="sd-frame">
+                <span>首帧</span>
+                <small>{shot.framing} · 9:16</small>
+              </div>
+            )}
             <div>
               <h3>{KIND_LABELS[shot.kind]}</h3>
               <p>{shot.line.trim() === "" ? "无台词" : `「${shot.line}」`}</p>
@@ -42,10 +65,22 @@ export default function Inspector({ step, shot, planShot }: Props) {
                 <span className={planShot?.route === "i2v" ? "hot" : ""}>
                   {planShot ? routeLabel(planShot.route) : "未生成"}
                 </span>
-                <span className="miss">P1 未接入缓存</span>
+                <span className={shotState?.clip.status === "succeeded" ? "" : "miss"}>
+                  {shotState?.clip.status === "succeeded"
+                    ? "片段已生成"
+                    : "片段未完成"}
+                </span>
               </div>
             </div>
           </div>
+
+          {shotState?.clip.path && (
+            <video
+              className="sd-insp-video"
+              controls
+              src={asset(shotState.clip.path) ?? ""}
+            />
+          )}
 
           <dl className="sd-kv">
             <div>
@@ -69,13 +104,26 @@ export default function Inspector({ step, shot, planShot }: Props) {
               <dd>{shot.motion ?? "—"}</dd>
             </div>
             <div>
+              <dt>首帧状态</dt>
+              <dd>{shotState?.frame.status ?? "待生成"}</dd>
+            </div>
+            <div>
+              <dt>片段状态</dt>
+              <dd>{shotState?.clip.status ?? "待生成"}</dd>
+            </div>
+            <div>
               <dt>本镜成本</dt>
-              <dd className="mono">{planShot ? formatYuan(planShot.cost_yuan) : "—"}</dd>
+              <dd className="mono">
+                {formatYuan(
+                  (shotState?.frame.cost_yuan ?? 0) +
+                    (shotState?.clip.cost_yuan ?? 0),
+                )}
+              </dd>
             </div>
           </dl>
 
           <div className="sd-note">
-            时长与成本来自计划单；P2 才会写入首帧/视频产物并支持重跑。
+            首帧/片段来自本集 state.json；hash 不一致会显示「已过期」，重跑不会重复扣费。
           </div>
         </>
       ) : (

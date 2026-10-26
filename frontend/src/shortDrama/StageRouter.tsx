@@ -58,7 +58,14 @@ export default function StageRouter(props: StageRouterProps) {
         />
       );
     case "frame":
-      return <FrameStage bundle={bundle} />;
+      return (
+        <FrameStage
+          bundle={bundle}
+          selectedShotId={props.selectedShotId}
+          onSelectShot={onSelectShot}
+          onReload={onReload}
+        />
+      );
     case "voice":
       return <VoiceStage bundle={bundle} />;
     case "edit":
