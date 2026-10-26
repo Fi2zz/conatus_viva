@@ -163,7 +163,7 @@ export const dramaApi = {
   runStep(
     seriesId: string,
     episodeId: string,
-    step: "cast" | "frame" | "voice",
+    step: "cast" | "frame" | "voice" | "edit",
     input: Omit<EstimateInput, "step"> = {},
   ): Promise<{ run_id: string }> {
     return request(

@@ -23,6 +23,7 @@ import 'pricing.dart';
 import 'runner.dart';
 import 'run_target.dart';
 import 'series.dart';
+import 'state.dart';
 import 'steps.dart';
 import 'store.dart';
 
@@ -48,6 +49,7 @@ enum DramaRoute {
   cancelRun,
   reconcileAudio,
   asset,
+  episodeOut,
   seriesAsset,
 }
 
@@ -85,6 +87,12 @@ DramaRoute? parseDramaRoute(String method, List<String> segments) {
       segments[6] == 'assets' &&
       method == 'GET') {
     return DramaRoute.asset;
+  }
+  if (segments.length >= 7 &&
+      segments[4] == 'episodes' &&
+      segments[6] == 'out' &&
+      method == 'GET') {
+    return DramaRoute.episodeOut;
   }
   if (segments.length == 6 && segments[4] == 'episodes') {
     if (method == 'GET') return DramaRoute.getEpisode;
@@ -150,7 +158,7 @@ class DramaController {
     'cast': runner != null,
     'frame': runner != null,
     'voice': runner != null,
-    'edit': false,
+    'edit': runner != null,
     'pack': false,
   };
 
@@ -222,6 +230,8 @@ class DramaController {
             episodeId!,
             segments.sublist(6).join('/'),
           );
+        case DramaRoute.episodeOut:
+          await _getOut(req, seriesId!, episodeId!, segments.sublist(6).join('/'));
         case DramaRoute.seriesAsset:
           await _getSeriesAsset(req, seriesId!, segments.sublist(5).join('/'));
       }
@@ -506,7 +516,8 @@ class DramaController {
     final step = dramaStepFromKey(key);
     if (step != DramaStep.cast &&
         step != DramaStep.frame &&
-        step != DramaStep.voice) {
+        step != DramaStep.voice &&
+        step != DramaStep.edit) {
       await _error(req, HttpStatus.notImplemented, '该工序尚未接入', 'not_wired');
       return;
     }
@@ -633,6 +644,21 @@ class DramaController {
         episodeId,
         store.readEpisode(seriesId, episodeId),
         next,
+      );
+      final after = store.readState(seriesId, episodeId);
+      final previous = after.steps['edit'];
+      store.writeState(
+        seriesId,
+        episodeId,
+        after.withStep(
+          'edit',
+          DramaStepRun(
+            status: DramaStatus.stale,
+            attempts: previous?.attempts ?? 0,
+            error: '时长回写后需要重新合成',
+            logs: previous?.logs ?? const <String>[],
+          ),
+        ),
       );
     }
     await _sendJson(req, HttpStatus.ok, <String, Object?>{
@@ -782,6 +808,30 @@ class DramaController {
     ).absolute.path;
     if (!relativePath.startsWith('assets/') ||
         !file.absolute.path.startsWith('$assetsRoot/')) {
+      await _error(req, HttpStatus.badRequest, 'path escape', 'path_escape');
+      return;
+    }
+    await _sendFile(req, file);
+  }
+
+  Future<void> _getOut(
+    HttpRequest req,
+    String seriesId,
+    String episodeId,
+    String relativePath,
+  ) async {
+    final File file;
+    try {
+      file = store.assetFile(seriesId, episodeId, relativePath);
+    } on ArgumentError catch (e) {
+      await _error(req, HttpStatus.badRequest, '${e.message}', 'path_escape');
+      return;
+    }
+    final outRoot = Directory(
+      '${store.episodeDir(seriesId, episodeId)}/out',
+    ).absolute.path;
+    if (!relativePath.startsWith('out/') ||
+        !file.absolute.path.startsWith('$outRoot/')) {
       await _error(req, HttpStatus.badRequest, 'path escape', 'path_escape');
       return;
     }

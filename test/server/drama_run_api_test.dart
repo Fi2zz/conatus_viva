@@ -240,6 +240,34 @@ void main() {
     expect((body['budget'] as Map<String, dynamic>)['i2v_total_yuan'], 20);
   });
 
+  test('edit run writes out/final.mp4 and final.srt', () async {
+    for (final step in <String>['frame', 'voice', 'edit']) {
+      final res = await _send(
+        port,
+        'POST',
+        '/api/drama/series/jietiao/episodes/ep07/steps/$step:run',
+        <String, Object?>{'target': 'all'},
+      );
+      expect(res.status, 202, reason: step);
+      final runId = (jsonDecode(res.body) as Map<String, dynamic>)['run_id'];
+      final run = await _pollRun(port, runId as String);
+      expect(run['status'], 'completed', reason: step);
+    }
+    final video = await _send(
+      port,
+      'GET',
+      '/api/drama/series/jietiao/episodes/ep07/out/final.mp4',
+    );
+    expect(video.status, 200);
+    final srt = await _send(
+      port,
+      'GET',
+      '/api/drama/series/jietiao/episodes/ep07/out/final.srt',
+    );
+    expect(srt.status, 200);
+    expect(srt.body, contains('还钱。'));
+  });
+
   test('voice run and audio reconcile work end to end', () async {
     final voice = await _send(
       port,

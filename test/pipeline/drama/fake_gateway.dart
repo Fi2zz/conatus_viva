@@ -26,6 +26,7 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
   int t2vCalls = 0;
   int localCalls = 0;
   int voiceCalls = 0;
+  int editCalls = 0;
   int? failImageCall;
   int? failClipCall;
   int? failLocalCall;
@@ -138,6 +139,20 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
       model: model,
       durationS: 2.5,
     );
+  }
+
+  @override
+  Future<void> composeEdit({
+    required List<DramaEditPart> parts,
+    required File outFile,
+    required int width,
+    required int height,
+    required void Function(String) onLog,
+  }) async {
+    editCalls += 1;
+    outFile.parent.createSync(recursive: true);
+    outFile.writeAsBytesSync(<int>[9, 9, 9]);
+    onLog('fake edit');
   }
 
   @override

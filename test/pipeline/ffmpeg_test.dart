@@ -225,6 +225,20 @@ void main() {
       expect(joined, contains('scale=1080:1920'));
     });
 
+    test('normalizeToDurationArgs pins duration and tpad', () {
+      final args = normalizeToDurationArgs(
+        input: File('/tmp/in.mp4'),
+        out: File('/tmp/out.mp4'),
+        durationS: 2.5,
+        width: 1080,
+        height: 1920,
+      );
+      final joined = args.join(' ');
+      expect(joined, contains('tpad=stop_mode=clone'));
+      expect(args, containsAllInOrder(['-t', '2.5']));
+      expect(joined, contains('scale=1080:1920'));
+    });
+
     test('normalizeArgsFor emits 1080x1920', () {
       final args = normalizeArgsFor(
         input: File('/tmp/in.mp4'),
@@ -359,6 +373,24 @@ void main() {
       expect(v[0], '1080');
       expect(v[1], '1920');
       expect(v[2], '24/1');
+    });
+
+    test('normalizeToDurationArgs output is exact-duration 1080x1920', () async {
+      final clip = await makeClip('short-src.mp4');
+      final out = File('${tmp.path}/duration.mp4');
+      await runFfmpeg(
+        normalizeToDurationArgs(
+          input: clip,
+          out: out,
+          durationS: 1.5,
+          width: 1080,
+          height: 1920,
+        ),
+      );
+      expect(await mediaDurationSeconds(out), closeTo(1.5, 0.2));
+      final v = await probeVideo(out);
+      expect(v[0], '1080');
+      expect(v[1], '1920');
     });
 
     test('normalizeArgsFor output is 1080x1920 with silent aac', () async {

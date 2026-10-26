@@ -23,3 +23,13 @@ export function seriesAssetUrl(seriesId: string, path: string): string {
     seriesId,
   )}/assets/${encodePath(path)}`;
 }
+
+export function episodeOutUrl(
+  seriesId: string,
+  episodeId: string,
+  file: string,
+): string {
+  return `/api/drama/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(
+    episodeId,
+  )}/out/${encodeURIComponent(file)}`;
+}

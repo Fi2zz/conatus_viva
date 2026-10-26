@@ -118,6 +118,60 @@ void main() {
     expect(await mediaDurationSeconds(out), closeTo(2.0, 0.2));
   });
 
+  test('composeEdit concatenates aligned vertical parts with audio', () async {
+    final cfg = await _cfg(temp);
+    final gateway = DashScopeDramaMediaGateway(cfg: cfg, pricing: _pricing());
+    final image = await _image(temp);
+    final clipA = File('${temp.path}/a.mp4');
+    final clipB = File('${temp.path}/b.mp4');
+    await gateway.renderLocalClip(
+      image: image,
+      outFile: clipA,
+      route: ShotRoute.kenburns,
+      width: 1080,
+      height: 1920,
+      durationS: 2,
+    );
+    await gateway.renderLocalClip(
+      image: image,
+      outFile: clipB,
+      route: ShotRoute.micro,
+      width: 1080,
+      height: 1920,
+      durationS: 2,
+    );
+    expect(await mediaDurationSeconds(clipA), closeTo(2, 0.3));
+    expect(await mediaDurationSeconds(clipB), closeTo(2, 0.3));
+    final audio = File('${temp.path}/line.wav');
+    final r = await Process.run('ffmpeg', <String>[
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:duration=1',
+      '-ar',
+      '24000',
+      '-ac',
+      '1',
+      audio.path,
+    ]);
+    expect(r.exitCode, 0);
+    final out = File('${temp.path}/final.mp4');
+    await gateway.composeEdit(
+      parts: <DramaEditPart>[
+        DramaEditPart(clip: clipA, durationS: 2, audio: audio, audioS: 1),
+        DramaEditPart(clip: clipB, durationS: 2),
+      ],
+      outFile: out,
+      width: 1080,
+      height: 1920,
+      onLog: (_) {},
+    );
+    expect(out.existsSync(), isTrue);
+    expect(await mediaDurationSeconds(out), closeTo(4, 0.5));
+    expect(await streamDurationSeconds(out, 'a:0'), greaterThan(3));
+  });
+
   test('normalizeClip writes the requested vertical size', () async {
     final cfg = await _cfg(temp);
     final gateway = DashScopeDramaMediaGateway(cfg: cfg, pricing: _pricing());

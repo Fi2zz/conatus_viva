@@ -43,6 +43,7 @@ const Set<DramaStep> kDramaWiredSteps = <DramaStep>{
   DramaStep.board,
   DramaStep.frame,
   DramaStep.voice,
+  DramaStep.edit,
 };
 
 /// `DramaStep` → wire key。
@@ -254,6 +255,10 @@ List<DramaStepView> deriveDramaSteps({
         if (lineShots.isEmpty) return DramaStatus.skipped;
         return doneAudio == lineShots.length ? DramaStatus.succeeded : DramaStatus.pending;
       case DramaStep.edit:
+        final run = state.steps['edit'];
+        if (run?.status == DramaStatus.succeeded) return DramaStatus.succeeded;
+        if (run?.status == DramaStatus.stale) return DramaStatus.stale;
+        return DramaStatus.pending;
       case DramaStep.pack:
         return DramaStatus.pending;
     }
@@ -263,6 +268,9 @@ List<DramaStepView> deriveDramaSteps({
     final run = state.steps[dramaStepKey(step)];
     if (run != null && run.status == DramaStatus.running) {
       return DramaStatus.running;
+    }
+    if (run != null && run.status == DramaStatus.stale) {
+      return DramaStatus.stale;
     }
     final next = derived(step);
     if (next == DramaStatus.succeeded) return next;

@@ -769,3 +769,9 @@ App
 - 音频先行：`POST .../audio:reconcile` 预览差异，`apply:true` 才回写 `storyboard.json` 并重算计划单；已有画面/片段通过 hash 变 `stale`，不静默重跑。
 - 缺 `voice_id` 回退 fallback 音色；TTS 价格未知，estimate 标记 `tts_pricing_unavailable`，费用闸门要求勾选。
 - 真实 smoke：1 句河南话 2.16s，通过；费用按实际账单。
+
+## 16. P3-2 剪辑 + 出片（2026-10-26）
+
+- `EditRunner`：逐镜归一化到 1080×1920/精确时长，配音 mux、无台词静音；concat filter 重编码拼接；ffprobe 校验总时长与音轨。
+- 输出 `out/final.mp4` + `out/final.srt`；SRT 不烧录；`GET .../out/*` 只读。
+- 音频时长回写会标记 `edit` stale；重新合成零外部费用。

@@ -9,7 +9,7 @@
 | 命令 | 结果 |
 |---|---|
 | `make analyze` | No issues found |
-| `make test-dart` | 404 tests passed |
+| `make test-dart` | 409 tests passed |
 | `make test-web` | vitest 62 passed / oxlint / check:dialogs 全绿 |
 | `cd frontend && npm run build` | 构建成功 |
 | `make web` | `web_build/` 与源码一致 |
@@ -63,3 +63,13 @@
 - 测试：`cost_test` 的 voice unpriced、`runner_test` 的配音/缓存、`drama_run_api_test` 的 voice run + reconcile。
 - 真实配音 smoke：`RUN_REAL_VOICE=1` 通过，1 句河南话实测 **2.16s**；TTS 费用按实际账单（目录未定价）。
 
+
+## P3-2 剪辑 + 出片（追加）
+
+- `EditRunner`：按集顺序把每个镜头的 clip 归一化到 1080×1920 + 精确时长；有配音时 mux 到该时长，无台词时保留静音轨。
+- `composeEdit` 使用 concat filter 重编码拼接，避免 demuxer 时间戳拉伸；ffprobe 校验总时长与音轨。
+- 输出 `out/final.mp4` 与同名 `out/final.srt`；SRT 由分镜台词与累计时长纯函数生成，不烧录。
+- `GET .../out/final.mp4` / `.srt` 只读服务；路径逃逸 400。
+- 音频回写后 `edit` 步骤标记 stale，必须重新合成；合成失败零费用可重试。
+- 前端剪辑工序：合成/重新合成、成片预览、SRT 下载、运行日志。
+- 测试：`runner_test` 的 edit 成功/缺配音拒绝、`drama_run_api_test` 的 frame→voice→edit→out、`media_gateway_test` 的真实 ffmpeg 拼接。

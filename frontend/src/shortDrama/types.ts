@@ -203,7 +203,7 @@ export interface DramaEstimate {
 }
 
 export interface EstimateInput {
-  step: "story" | "storyboard" | "cast" | "frame" | "voice";
+  step: "story" | "storyboard" | "cast" | "frame" | "voice" | "edit";
   cast_ids?: string[];
   shot_ids?: string[];
   target?: "frame" | "clip" | "all";
@@ -229,7 +229,7 @@ export interface AudioReconcileChange {
 export interface DramaRun {
   run_id: string;
   status: "running" | "completed" | "failed" | "cancelled";
-  step: "cast" | "frame" | "voice";
+  step: "cast" | "frame" | "voice" | "edit";
   items: DramaRunItem[];
   logs: string[];
   actual_yuan: number;

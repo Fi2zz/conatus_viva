@@ -327,6 +327,58 @@ void main() {
     expect(gateway.localCalls, 1);
   });
 
+  test('edit composes final.mp4 and final.srt from frame + voice', () async {
+    store.writeStoryboard('jietiao', 'ep07', board());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    )).done;
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.voice,
+    )).done;
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.edit,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.completed);
+    expect(gateway.editCalls, 1);
+    final state = store.readState('jietiao', 'ep07');
+    expect(state.steps['edit']!.status, DramaStatus.succeeded);
+    final out = store.assetFile('jietiao', 'ep07', 'out/final.mp4');
+    final srt = store.assetFile('jietiao', 'ep07', 'out/final.srt');
+    expect(out.existsSync(), isTrue);
+    expect(srt.readAsStringSync(), contains('还钱。'));
+  });
+
+  test('edit refuses when voice is missing', () async {
+    store.writeStoryboard('jietiao', 'ep07', board());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    )).done;
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.edit,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.failed);
+    expect(run.error, contains('配音'));
+    expect(gateway.editCalls, 0);
+  });
+
   test('voice run stores audio and skips on second run', () async {
     final gateway = FakeDramaMediaGateway();
     final r = runner(gateway);

@@ -21,6 +21,20 @@ import '../image_generation.dart';
 import '../render_plan.dart';
 import 'pricing.dart';
 
+class DramaEditPart {
+  const DramaEditPart({
+    required this.clip,
+    required this.durationS,
+    this.audio,
+    this.audioS,
+  });
+
+  final File clip;
+  final double durationS;
+  final File? audio;
+  final double? audioS;
+}
+
 class DramaMediaResult {
   const DramaMediaResult({
     required this.path,
@@ -73,6 +87,14 @@ abstract interface class DramaMediaGateway {
     required String? fallbackVoice,
     required String instruction,
     required File outFile,
+    required void Function(String) onLog,
+  });
+
+  Future<void> composeEdit({
+    required List<DramaEditPart> parts,
+    required File outFile,
+    required int width,
+    required int height,
     required void Function(String) onLog,
   });
 
@@ -355,6 +377,75 @@ class DashScopeDramaMediaGateway implements DramaMediaGateway {
         ErrorClass.fatal,
         '本地片段时长异常：期望 ${durationS}s，实际 ${actual.toStringAsFixed(2)}s',
       );
+    }
+  }
+
+  @override
+  Future<void> composeEdit({
+    required List<DramaEditPart> parts,
+    required File outFile,
+    required int width,
+    required int height,
+    required void Function(String) onLog,
+  }) async {
+    if (parts.isEmpty) {
+      throw PipelineError(ErrorClass.fatal, '没有可合成的镜头');
+    }
+    final temp = Directory.systemTemp.createTempSync('drama_edit_');
+    try {
+      final normalized = <File>[];
+      var index = 0;
+      for (final part in parts) {
+        final norm = File('${temp.path}/norm-$index.mp4');
+        await runFfmpeg(
+          normalizeToDurationArgs(
+            input: part.clip,
+            out: norm,
+            durationS: part.durationS,
+            width: width,
+            height: height,
+          ),
+        );
+        if (part.audio != null) {
+          final muxed = File('${temp.path}/mux-$index.mp4');
+          await runFfmpeg(
+            muxArgsForDuration(
+              video: norm,
+              audio: part.audio!,
+              audioS: part.audioS ?? part.durationS,
+              durationS: part.durationS,
+              out: muxed,
+            ),
+          );
+          normalized.add(muxed);
+        } else {
+          normalized.add(norm);
+        }
+        onLog('已对齐镜头 ${index + 1}/${parts.length}');
+        index += 1;
+      }
+      final tmpOut = File('${outFile.path}.tmp.mp4');
+      outFile.parent.createSync(recursive: true);
+      await runFfmpeg(concatFilterArgs(parts: normalized, out: tmpOut));
+      tmpOut.renameSync(outFile.path);
+      final expected = parts.fold<double>(
+        0,
+        (sum, part) => sum + part.durationS,
+      );
+      final actual = await mediaDurationSeconds(outFile);
+      if ((actual - expected).abs() > 0.8) {
+        throw PipelineError(
+          ErrorClass.fatal,
+          '成片时长异常：期望 ${expected.toStringAsFixed(1)}s，实际 ${actual.toStringAsFixed(1)}s',
+        );
+      }
+      await streamDurationSeconds(outFile, 'a:0');
+    } finally {
+      try {
+        temp.deleteSync(recursive: true);
+      } catch (_) {
+        // Best-effort temp cleanup.
+      }
     }
   }
 

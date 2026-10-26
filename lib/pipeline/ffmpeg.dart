@@ -196,6 +196,46 @@ List<String> normalizeArgsFor({
   ];
 }
 
+/// Normalize [input] to exactly [durationS] with a silent stereo track;
+/// short clips are extended by cloning the last frame, long clips trimmed.
+List<String> normalizeToDurationArgs({
+  required File input,
+  required File out,
+  required double durationS,
+  int width = 1280,
+  int height = 720,
+  int fps = 24,
+}) {
+  return <String>[
+    '-y',
+    '-i',
+    input.path,
+    '-f',
+    'lavfi',
+    '-i',
+    'anullsrc=channel_layout=stereo:sample_rate=44100',
+    '-map',
+    '0:v:0',
+    '-map',
+    '1:a:0',
+    '-vf',
+    'scale=$width:$height:force_original_aspect_ratio=decrease,'
+        'pad=$width:$height:(ow-iw)/2:(oh-ih)/2,fps=$fps,'
+        'tpad=stop_mode=clone:stop_duration=30',
+    '-t',
+    '$durationS',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
+    out.path,
+  ];
+}
+
 /// Mux segment video with its TTS audio into exactly [durationS] seconds.
 ///
 /// [audioS] is the measured TTS audio length (state `audio_s`): the audio
@@ -208,6 +248,20 @@ List<String> muxArgs({
   required File audio,
   required double audioS,
   required int durationS,
+  required File out,
+}) => muxArgsForDuration(
+  video: video,
+  audio: audio,
+  audioS: audioS,
+  durationS: durationS.toDouble(),
+  out: out,
+);
+
+List<String> muxArgsForDuration({
+  required File video,
+  required File audio,
+  required double audioS,
+  required double durationS,
   required File out,
 }) {
   final audioEnd = audioS < durationS ? audioS : durationS;
@@ -271,6 +325,46 @@ List<String> concatArgs({required List<File> parts, required File out}) {
     concatListFileFor(out).path,
     '-c',
     'copy',
+    out.path,
+  ];
+}
+
+/// Re-encode concat for parts that may carry slightly different timestamps.
+/// The demuxer stream-copy path is faster but can stretch duration when audio
+/// and video timestamps disagree; final episode edit uses this filter path.
+List<String> concatFilterArgs({
+  required List<File> parts,
+  required File out,
+  int fps = 24,
+}) {
+  if (parts.isEmpty) {
+    throw ArgumentError('concatFilterArgs: parts must not be empty');
+  }
+  final inputs = <String>[
+    for (final part in parts) ...<String>['-i', part.path],
+  ];
+  final labels = <String>[
+    for (var i = 0; i < parts.length; i++) '[:v:0][:a:0]',
+  ].join();
+  return <String>[
+    '-y',
+    ...inputs,
+    '-filter_complex',
+    '${labels}concat=n=${parts.length}:v=1:a=1[v][a]',
+    '-map',
+    '[v]',
+    '-map',
+    '[a]',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-r',
+    '$fps',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
     out.path,
   ];
 }

@@ -8,6 +8,7 @@ import '../config.dart';
 import '../dialect_map.dart';
 import '../generation_models.dart';
 import '../render_plan.dart';
+import '../srt.dart';
 import '../storyboard.dart';
 import 'episode.dart';
 import 'hashes.dart';
@@ -62,7 +63,8 @@ class DramaRunner {
   }) async {
     if (step != DramaStep.cast &&
         step != DramaStep.frame &&
-        step != DramaStep.voice) {
+        step != DramaStep.voice &&
+        step != DramaStep.edit) {
       throw ArgumentError.value(step.name, 'step', 'step is not wired');
     }
     final active = _runs.activeFor(seriesId, episodeId);
@@ -211,6 +213,18 @@ class DramaRunner {
             board: board,
             shotIds: shotIds,
             force: force,
+            state: state,
+          );
+          state = result.state;
+          status = result.status;
+          error = result.error;
+        case DramaStep.edit:
+          final result = await _runEdit(
+            run: run,
+            series: series,
+            episode: episode,
+            board: board,
+            planJson: planJson,
             state: state,
           );
           state = result.state;
@@ -510,6 +524,127 @@ class DramaRunner {
       status: failed == 0 ? DramaStatus.succeeded : DramaStatus.failed,
       error: failed == 0 ? null : '$failed 句配音失败',
     );
+  }
+
+  Future<({DramaEpisodeState state, DramaStatus status, String? error})>
+  _runEdit({
+    required DramaRun run,
+    required DramaSeries series,
+    required DramaEpisode episode,
+    required Storyboard? board,
+    required Map<String, Object?>? planJson,
+    required DramaEpisodeState state,
+  }) async {
+    if (board == null || planJson == null) {
+      return (
+        state: state,
+        status: DramaStatus.failed,
+        error: '缺少分镜表或计划单',
+      );
+    }
+    final steps = deriveDramaSteps(
+      series: series,
+      episode: episode,
+      storyboard: board,
+      planJson: planJson,
+      state: state,
+      wired: kDramaWiredSteps,
+    );
+    final frameStep = steps.firstWhere((step) => step.key == DramaStep.frame);
+    if (frameStep.status != DramaStatus.succeeded) {
+      return (
+        state: state,
+        status: DramaStatus.failed,
+        error: '画面未完成或已过期，先重跑画面',
+      );
+    }
+    final plan = DramaPlanView(planJson);
+    final parts = <DramaEditPart>[];
+    final srtSegments = <SegmentInput>[];
+    var start = 0.0;
+    for (final shot in board.shots) {
+      final shotState = state.shots[shot.id];
+      final clip = shotState?.clip;
+      if (clip == null ||
+          clip.status != DramaStatus.succeeded ||
+          clip.path == null) {
+        return (
+          state: state,
+          status: DramaStatus.failed,
+          error: '${shot.id} 没有可用片段',
+        );
+      }
+      final duration = plan.durationFor(shot.id);
+      final audio = shot.line.trim().isEmpty ? null : shotState?.audio;
+      if (shot.line.trim().isNotEmpty &&
+          (audio == null ||
+              audio.status != DramaStatus.succeeded ||
+              audio.path == null ||
+              audio.durationS == null)) {
+        return (
+          state: state,
+          status: DramaStatus.failed,
+          error: '${shot.id} 台词还没有可用配音',
+        );
+      }
+      parts.add(
+        DramaEditPart(
+          clip: store.assetFile(run.seriesId, run.episodeId, clip.path!),
+          durationS: duration,
+          audio: audio?.path == null
+              ? null
+              : store.assetFile(run.seriesId, run.episodeId, audio!.path!),
+          audioS: audio?.durationS,
+        ),
+      );
+      if (shot.line.trim().isNotEmpty) {
+        srtSegments.add(
+          SegmentInput(
+            line: shot.line,
+            startVideoS: start,
+            videoDurationS: duration,
+            audioS: audio!.durationS!,
+          ),
+        );
+      }
+      start += duration;
+    }
+    final outVideo = store.assetFile(
+      run.seriesId,
+      run.episodeId,
+      'out/final.mp4',
+    );
+    final outSrt = store.assetFile(
+      run.seriesId,
+      run.episodeId,
+      'out/final.srt',
+    );
+    try {
+      await gateway.composeEdit(
+        parts: parts,
+        outFile: outVideo,
+        width: series.frame.width,
+        height: series.frame.height,
+        onLog: run.logs.add,
+      );
+      outSrt.writeAsStringSync(renderSrt(buildSrt(segs: srtSegments)));
+      run.items.add(
+        DramaRunItem(
+          id: 'final',
+          kind: 'edit',
+          status: DramaStatus.succeeded,
+          path: 'out/final.mp4',
+        ),
+      );
+      run.logs.add('成片与字幕已生成');
+      return (state: state, status: DramaStatus.succeeded, error: null);
+    } on Object catch (e) {
+      return (
+        state: state,
+        status: DramaStatus.failed,
+        error: '合成失败：$e',
+      );
+    }
   }
 
   Future<({DramaEpisodeState state, DramaStatus status, String? error})>
