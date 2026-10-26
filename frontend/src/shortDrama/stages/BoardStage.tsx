@@ -75,7 +75,7 @@ export default function BoardStage({
       const next = await dramaApi.estimate(
         bundle.series.series_id,
         bundle.episode.episode_id,
-        ["storyboard"],
+        { step: "storyboard" },
       );
       setEstimate(next);
     } catch (cause) {

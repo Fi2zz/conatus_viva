@@ -2,10 +2,12 @@
 import type {
   DramaEpisode,
   DramaEstimate,
+  DramaRun,
   DramaSeries,
   DramaSeriesSummary,
   EpisodeBundle,
   EpisodeSummary,
+  EstimateInput,
   StoryExtractResult,
   Storyboard,
   StoryboardDraftResult,
@@ -152,12 +154,49 @@ export const dramaApi = {
   estimate(
     seriesId: string,
     episodeId: string,
-    targets: string[],
-    force = false,
+    input: EstimateInput,
   ): Promise<DramaEstimate> {
+    return request(`${base(seriesId, episodeId)}/estimate`, json("POST", input));
+  },
+
+  runStep(
+    seriesId: string,
+    episodeId: string,
+    step: "cast" | "frame",
+    input: Omit<EstimateInput, "step"> = {},
+  ): Promise<{ run_id: string }> {
     return request(
-      `${base(seriesId, episodeId)}/estimate`,
-      json("POST", { targets, force }),
+      `${base(seriesId, episodeId)}/steps/${step}:run`,
+      json("POST", input),
+    );
+  },
+
+  runShot(
+    seriesId: string,
+    episodeId: string,
+    shotId: string,
+    input: { target?: "frame" | "clip" | "all"; force?: boolean; degrade?: boolean } = {},
+  ): Promise<{ run_id: string }> {
+    return request(
+      `${base(seriesId, episodeId)}/shots/${encodeURIComponent(shotId)}:run`,
+      json("POST", input),
+    );
+  },
+
+  getRun(seriesId: string, episodeId: string, runId: string): Promise<DramaRun> {
+    return request(
+      `${base(seriesId, episodeId)}/runs/${encodeURIComponent(runId)}`,
+    );
+  },
+
+  cancelRun(
+    seriesId: string,
+    episodeId: string,
+    runId: string,
+  ): Promise<{ status: string }> {
+    return request(
+      `${base(seriesId, episodeId)}/runs/${encodeURIComponent(runId)}:cancel`,
+      json("POST", {}),
     );
   },
 

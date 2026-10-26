@@ -146,10 +146,26 @@ export interface EpisodeState {
     string,
     { status: StepStatus; attempts: number; error: string | null }
   >;
-  shots: Record<string, unknown>;
+  shots: Record<string, DramaShotState>;
   active_run: string | null;
   cost: { actual_yuan: number; estimated_remaining_yuan: number };
   warnings: string[];
+}
+
+export interface DramaArtifact {
+  status: StepStatus;
+  path: string | null;
+  source_hash: string | null;
+  model: string | null;
+  cost_yuan: number | null;
+  duration_s: number | null;
+  error: string | null;
+}
+
+export interface DramaShotState {
+  frame: DramaArtifact;
+  clip: DramaArtifact;
+  audio: DramaArtifact;
 }
 
 export interface EpisodeBundle {
@@ -174,8 +190,43 @@ export interface DramaEstimate {
     estimated: boolean;
   }>;
   total_estimated_yuan: number;
+  i2v_estimated_yuan: number;
   unpriced: Array<{ kind: string; id: string; reason: string }>;
-  budget: { total_yuan: number; actual_yuan: number; remaining_yuan: number };
+  budget: {
+    total_yuan: number;
+    actual_yuan: number;
+    remaining_yuan: number;
+    i2v_total_yuan: number;
+    i2v_actual_yuan: number;
+    i2v_remaining_yuan: number;
+  };
+}
+
+export interface EstimateInput {
+  step: "story" | "storyboard" | "cast" | "frame";
+  cast_ids?: string[];
+  shot_ids?: string[];
+  target?: "frame" | "clip" | "all";
+  force?: boolean;
+}
+
+export interface DramaRunItem {
+  id: string;
+  kind: string;
+  status: StepStatus;
+  path: string | null;
+  cost_yuan: number | null;
+  error: string | null;
+}
+
+export interface DramaRun {
+  run_id: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  step: "cast" | "frame";
+  items: DramaRunItem[];
+  logs: string[];
+  actual_yuan: number;
+  error: string | null;
 }
 
 export interface StoryExtractResult {

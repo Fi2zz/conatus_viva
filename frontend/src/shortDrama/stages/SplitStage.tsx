@@ -80,7 +80,7 @@ export default function SplitStage({ bundle, onBundle, onReload }: Props) {
       const next = await dramaApi.estimate(
         bundle.series.series_id,
         bundle.episode.episode_id,
-        ["story"],
+        { step: "story" },
       );
       setEstimate(next);
     } catch (cause) {
