@@ -762,3 +762,10 @@ App
 - [x] 离线全绿；真实 smoke 通过（估算 ¥0.85，实际 ¥0.85）。
 - [x] 未接入 voice / edit / pack 仍为 501 / 「未接入」。
 - [x] 详细记录：`docs/superpowers/plans/2026-10-26-p2-acceptance.md`。
+
+## 15. P3-1 声音先行（2026-10-26）
+
+- `VoiceRunner`：逐句 TTS 写 `assets/audio/<shot>/<hash>.wav`，ffprobe 实测时长。
+- 音频先行：`POST .../audio:reconcile` 预览差异，`apply:true` 才回写 `storyboard.json` 并重算计划单；已有画面/片段通过 hash 变 `stale`，不静默重跑。
+- 缺 `voice_id` 回退 fallback 音色；TTS 价格未知，estimate 标记 `tts_pricing_unavailable`，费用闸门要求勾选。
+- 真实 smoke：1 句河南话 2.16s，通过；费用按实际账单。
