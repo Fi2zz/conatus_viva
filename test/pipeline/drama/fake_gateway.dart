@@ -27,6 +27,7 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
   int localCalls = 0;
   int voiceCalls = 0;
   int editCalls = 0;
+  int coverCalls = 0;
   int? failImageCall;
   int? failClipCall;
   int? failLocalCall;
@@ -153,6 +154,17 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
     outFile.parent.createSync(recursive: true);
     outFile.writeAsBytesSync(<int>[9, 9, 9]);
     onLog('fake edit');
+  }
+
+  @override
+  Future<void> extractCover({
+    required File video,
+    required File outFile,
+    required int width,
+  }) async {
+    coverCalls += 1;
+    outFile.parent.createSync(recursive: true);
+    outFile.writeAsBytesSync(<int>[8, 8]);
   }
 
   @override

@@ -5,7 +5,6 @@ DART_TEST_CMD := dart test test/pipeline \
 	test/server/api_router_test.dart \
 	test/server/image_api_test.dart \
 	test/server/video_api_test.dart \
-	test/server/short_drama_api_test.dart \
 	test/server/drama_api_test.dart \
 	test/server/drama_run_api_test.dart \
 	test/server/settings_api_test.dart

@@ -159,7 +159,7 @@ class DramaController {
     'frame': runner != null,
     'voice': runner != null,
     'edit': runner != null,
-    'pack': false,
+    'pack': runner != null,
   };
 
   Future<void> handle(HttpRequest req) async {
@@ -517,7 +517,8 @@ class DramaController {
     if (step != DramaStep.cast &&
         step != DramaStep.frame &&
         step != DramaStep.voice &&
-        step != DramaStep.edit) {
+        step != DramaStep.edit &&
+        step != DramaStep.pack) {
       await _error(req, HttpStatus.notImplemented, '该工序尚未接入', 'not_wired');
       return;
     }
@@ -646,20 +647,22 @@ class DramaController {
         next,
       );
       final after = store.readState(seriesId, episodeId);
-      final previous = after.steps['edit'];
-      store.writeState(
-        seriesId,
-        episodeId,
-        after.withStep(
-          'edit',
-          DramaStepRun(
-            status: DramaStatus.stale,
-            attempts: previous?.attempts ?? 0,
-            error: '时长回写后需要重新合成',
-            logs: previous?.logs ?? const <String>[],
+      for (final key in <String>['edit', 'pack']) {
+        final previous = after.steps[key];
+        store.writeState(
+          seriesId,
+          episodeId,
+          store.readState(seriesId, episodeId).withStep(
+            key,
+            DramaStepRun(
+              status: DramaStatus.stale,
+              attempts: previous?.attempts ?? 0,
+              error: '时长回写后需要重新合成',
+              logs: previous?.logs ?? const <String>[],
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
     await _sendJson(req, HttpStatus.ok, <String, Object?>{
       'changes': changes,
@@ -895,6 +898,8 @@ class DramaController {
         return 'audio/wav';
       case 'srt':
         return 'text/plain; charset=utf-8';
+      case 'json':
+        return 'application/json';
       default:
         return null;
     }

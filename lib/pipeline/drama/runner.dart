@@ -2,7 +2,10 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 
 import '../config.dart';
 import '../dialect_map.dart';
@@ -13,6 +16,7 @@ import '../storyboard.dart';
 import 'episode.dart';
 import 'hashes.dart';
 import 'media_gateway.dart';
+import 'package_manifest.dart';
 import 'plan_view.dart';
 import 'run_registry.dart';
 import 'run_target.dart';
@@ -64,7 +68,8 @@ class DramaRunner {
     if (step != DramaStep.cast &&
         step != DramaStep.frame &&
         step != DramaStep.voice &&
-        step != DramaStep.edit) {
+        step != DramaStep.edit &&
+        step != DramaStep.pack) {
       throw ArgumentError.value(step.name, 'step', 'step is not wired');
     }
     final active = _runs.activeFor(seriesId, episodeId);
@@ -213,6 +218,18 @@ class DramaRunner {
             board: board,
             shotIds: shotIds,
             force: force,
+            state: state,
+          );
+          state = result.state;
+          status = result.status;
+          error = result.error;
+        case DramaStep.pack:
+          final result = await _runPackage(
+            run: run,
+            series: series,
+            episode: episode,
+            board: board,
+            planJson: planJson,
             state: state,
           );
           state = result.state;
@@ -524,6 +541,116 @@ class DramaRunner {
       status: failed == 0 ? DramaStatus.succeeded : DramaStatus.failed,
       error: failed == 0 ? null : '$failed 句配音失败',
     );
+  }
+
+  Future<({DramaEpisodeState state, DramaStatus status, String? error})>
+  _runPackage({
+    required DramaRun run,
+    required DramaSeries series,
+    required DramaEpisode episode,
+    required Storyboard? board,
+    required Map<String, Object?>? planJson,
+    required DramaEpisodeState state,
+  }) async {
+    if (board == null || planJson == null) {
+      return (state: state, status: DramaStatus.failed, error: '缺少分镜表或计划单');
+    }
+    final steps = deriveDramaSteps(
+      series: series,
+      episode: episode,
+      storyboard: board,
+      planJson: planJson,
+      state: state,
+      wired: kDramaWiredSteps,
+    );
+    final edit = steps.firstWhere((step) => step.key == DramaStep.edit);
+    if (edit.status != DramaStatus.succeeded) {
+      return (
+        state: state,
+        status: DramaStatus.failed,
+        error: '成片未完成或已过期，先重新合成',
+      );
+    }
+    final finalFile = store.assetFile(
+      run.seriesId,
+      run.episodeId,
+      'out/final.mp4',
+    );
+    final srtFile = store.assetFile(run.seriesId, run.episodeId, 'out/final.srt');
+    if (!finalFile.existsSync() || !srtFile.existsSync()) {
+      return (state: state, status: DramaStatus.failed, error: '成片或字幕不存在');
+    }
+    final coverFile = store.assetFile(
+      run.seriesId,
+      run.episodeId,
+      'out/cover.png',
+    );
+    final firstFrame = board.shots
+        .map((shot) => state.shots[shot.id]?.frame)
+        .where((frame) => frame?.path != null)
+        .map((frame) => store.assetFile(run.seriesId, run.episodeId, frame!.path!))
+        .where((file) => file.existsSync())
+        .firstOrNull;
+    try {
+      if (firstFrame != null) {
+        coverFile.parent.createSync(recursive: true);
+        firstFrame.copySync(coverFile.path);
+      } else {
+        await gateway.extractCover(
+          video: finalFile,
+          outFile: coverFile,
+          width: series.frame.width,
+        );
+      }
+      final files = <Map<String, Object?>>[
+        for (final file in <File>[finalFile, srtFile, coverFile])
+          <String, Object?>{
+            'name': _basename(file.path),
+            'bytes': file.lengthSync(),
+            'sha256': sha256.convert(file.readAsBytesSync()).toString(),
+          },
+      ];
+      final plan = DramaPlanView(planJson);
+      final totalDuration = board.shots.fold<double>(
+        0,
+        (sum, shot) => sum + plan.durationFor(shot.id),
+      );
+      final manifest = buildPackageManifest(
+        contentId: board.contentId,
+        title: board.title,
+        durationS: totalDuration,
+        shotCount: board.shots.length,
+        actualYuan: state.actualYuan,
+        files: files,
+        createdAt: _now().toIso8601String(),
+      );
+      final out = store.assetFile(
+        run.seriesId,
+        run.episodeId,
+        'out/package.json',
+      );
+      out.parent.createSync(recursive: true);
+      out.writeAsStringSync(
+        '${const JsonEncoder.withIndent('  ').convert(manifest)}\n',
+      );
+      run.items.add(
+        DramaRunItem(
+          id: 'package',
+          kind: 'pack',
+          status: DramaStatus.succeeded,
+          path: 'out/package.json',
+        ),
+      );
+      run.logs.add('投放包已生成');
+      return (state: state, status: DramaStatus.succeeded, error: null);
+    } on Object catch (e) {
+      return (state: state, status: DramaStatus.failed, error: '打包失败：$e');
+    }
+  }
+
+  static String _basename(String path) {
+    final parts = path.split(Platform.pathSeparator);
+    return parts.isEmpty ? path : parts.last;
   }
 
   Future<({DramaEpisodeState state, DramaStatus status, String? error})>
@@ -1096,4 +1223,8 @@ class DramaRunner {
           ),
         );
   }
+}
+
+extension _RunnerFirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

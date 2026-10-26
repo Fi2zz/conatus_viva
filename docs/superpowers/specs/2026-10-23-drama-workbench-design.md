@@ -775,3 +775,9 @@ App
 - `EditRunner`：逐镜归一化到 1080×1920/精确时长，配音 mux、无台词静音；concat filter 重编码拼接；ffprobe 校验总时长与音轨。
 - 输出 `out/final.mp4` + `out/final.srt`；SRT 不烧录；`GET .../out/*` 只读。
 - 音频时长回写会标记 `edit` stale；重新合成零外部费用。
+
+## 17. P3-3 打包 + 清理（2026-10-26）
+
+- `PackageRunner`：生成 `out/cover.png` 与 `out/package.json`；清单含文件大小、sha256、时长、镜头数、实际成本。
+- `pack` 工序接入；`GET .../out/*` 服务成片/字幕/封面/清单。
+- 删除旧 CLI 与 `GET /api/short-drama/plans/*` 只读端点；新工作台成为唯一入口。

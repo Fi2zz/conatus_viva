@@ -241,7 +241,7 @@ void main() {
   });
 
   test('edit run writes out/final.mp4 and final.srt', () async {
-    for (final step in <String>['frame', 'voice', 'edit']) {
+    for (final step in <String>['frame', 'voice', 'edit', 'pack']) {
       final res = await _send(
         port,
         'POST',
@@ -266,6 +266,13 @@ void main() {
     );
     expect(srt.status, 200);
     expect(srt.body, contains('还钱。'));
+    final pkg = await _send(
+      port,
+      'GET',
+      '/api/drama/series/jietiao/episodes/ep07/out/package.json',
+    );
+    expect(pkg.status, 200);
+    expect(pkg.body, contains('final.mp4'));
   });
 
   test('voice run and audio reconcile work end to end', () async {

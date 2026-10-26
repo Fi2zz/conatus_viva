@@ -358,6 +358,34 @@ void main() {
     expect(srt.readAsStringSync(), contains('还钱。'));
   });
 
+  test('pack writes manifest and cover after edit', () async {
+    store.writeStoryboard('jietiao', 'ep07', board());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    for (final step in <DramaStep>[
+      DramaStep.frame,
+      DramaStep.voice,
+      DramaStep.edit,
+      DramaStep.pack,
+    ]) {
+      final run = await r.startStep(
+        seriesId: 'jietiao',
+        episodeId: 'ep07',
+        step: step,
+      );
+      await run.done;
+      expect(run.status, DramaRunStatus.completed, reason: run.error);
+    }
+    final manifest = store.assetFile('jietiao', 'ep07', 'out/package.json');
+    expect(manifest.existsSync(), isTrue);
+    expect(manifest.readAsStringSync(), contains('final.mp4'));
+    expect(
+      store.assetFile('jietiao', 'ep07', 'out/cover.png').existsSync(),
+      isTrue,
+    );
+  });
+
   test('edit refuses when voice is missing', () async {
     store.writeStoryboard('jietiao', 'ep07', board());
     store.writePlanJson('jietiao', 'ep07', planJson());

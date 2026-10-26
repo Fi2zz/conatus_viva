@@ -12,7 +12,6 @@ enum ApiRoute {
   createVideo,
   getVideo,
   getVideoFile,
-  getShortDramaPlan,
   settings,
   drama,
   unknown,
@@ -61,9 +60,6 @@ ApiRoute apiRouteFor(String method, String path) {
   }
   if (path == '/api/settings' && (method == 'GET' || method == 'PUT')) {
     return ApiRoute.settings;
-  }
-  if (method == 'GET' && path.startsWith('/api/short-drama/plans/')) {
-    return ApiRoute.getShortDramaPlan;
   }
   if (path.startsWith('/api/drama/')) {
     return ApiRoute.drama;

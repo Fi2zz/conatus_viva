@@ -9,7 +9,7 @@
 | 命令 | 结果 |
 |---|---|
 | `make analyze` | No issues found |
-| `make test-dart` | 409 tests passed |
+| `make test-dart` | 381 tests passed |
 | `make test-web` | vitest 62 passed / oxlint / check:dialogs 全绿 |
 | `cd frontend && npm run build` | 构建成功 |
 | `make web` | `web_build/` 与源码一致 |
@@ -73,3 +73,11 @@
 - 音频回写后 `edit` 步骤标记 stale，必须重新合成；合成失败零费用可重试。
 - 前端剪辑工序：合成/重新合成、成片预览、SRT 下载、运行日志。
 - 测试：`runner_test` 的 edit 成功/缺配音拒绝、`drama_run_api_test` 的 frame→voice→edit→out、`media_gateway_test` 的真实 ffmpeg 拼接。
+
+## P3-3 打包 + 清理（追加）
+
+- `PackageRunner`：要求成片/字幕已完成，生成 `out/cover.png`（优先首帧，否则从成片抽帧）与 `out/package.json`。
+- 清单包含成片、SRT、封面的大小与 sha256、时长、镜头数、实际成本；`GET .../out/*` 只读服务，JSON 也有 content-type。
+- 打包工序接入工作台：生成/重新打包、四个文件下载、运行日志。
+- 清理旧入口：删除 `bin/short_drama.dart`、`lib/pipeline/planner_cli.dart`、`test/pipeline/planner_cli_test.dart`、`test/server/short_drama_api_test.dart` 与旧 `GET /api/short-drama/plans/*` 端点。
+- 测试：`runner_test` 的 frame→voice→edit→pack、`drama_run_api_test` 的 out/package.json、真实 ffmpeg 合成测试。

@@ -77,6 +77,6 @@ export default function StageRouter(props: StageRouterProps) {
     case "edit":
       return <EditStage bundle={bundle} onReload={onReload} />;
     case "pack":
-      return <PackStage />;
+      return <PackStage bundle={bundle} onReload={onReload} />;
   }
 }

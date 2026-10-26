@@ -98,6 +98,12 @@ abstract interface class DramaMediaGateway {
     required void Function(String) onLog,
   });
 
+  Future<void> extractCover({
+    required File video,
+    required File outFile,
+    required int width,
+  });
+
   Future<void> renderLocalClip({
     required File image,
     required File outFile,
@@ -447,6 +453,25 @@ class DashScopeDramaMediaGateway implements DramaMediaGateway {
         // Best-effort temp cleanup.
       }
     }
+  }
+
+  @override
+  Future<void> extractCover({
+    required File video,
+    required File outFile,
+    required int width,
+  }) async {
+    outFile.parent.createSync(recursive: true);
+    await runFfmpeg(<String>[
+      '-y',
+      '-i',
+      video.path,
+      '-frames:v',
+      '1',
+      '-vf',
+      'scale=$width:-2',
+      outFile.path,
+    ]);
   }
 
   @override
