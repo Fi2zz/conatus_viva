@@ -6,7 +6,7 @@ import 'package:flutter_wanxiang/pipeline/host.dart';
 import 'package:test/test.dart';
 
 /// Offline smoke for the CLI host assembly: no keys, no network.
-PipelineConfig testConfig() => const PipelineConfig(
+PipelineConfig testConfig() => PipelineConfig(
   llmModel: 'llm-x',
   ttsModel: 'tts-x',
   ttsFallbackModel: 'tts-fb',

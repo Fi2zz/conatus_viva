@@ -151,4 +151,58 @@ void main() {
     expect(c.imagePrices['x'], {'1K': 0.2});
     expect(c.videoPrices, isEmpty);
   });
+
+  test('updateSecrets overrides key and workspace host immediately', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(tmp, '{}'),
+      env: {'DASHSCOPE_API_KEY': 'sk-env'},
+    );
+    expect(c.requireApiKey(), 'sk-env');
+    c.updateSecrets(<String, String?>{
+      'DASHSCOPE_API_KEY': 'sk-store',
+      'DASHSCOPE_WORKSPACE_ID': 'ws-1',
+    });
+    expect(c.requireApiKey(), 'sk-store');
+    expect(c.workspaceId, 'ws-1');
+    expect(c.apiHost, 'https://ws-1.cn-beijing.maas.aliyuncs.com');
+    expect(
+      c.baseUrl,
+      'https://ws-1.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(c.hasApiKey, isTrue);
+  });
+
+  test('empty secret clears the runtime override', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(tmp, '{}'),
+      env: {},
+    );
+    c.updateSecrets(<String, String?>{'DASHSCOPE_API_KEY': 'sk-store'});
+    c.updateSecrets(<String, String?>{'DASHSCOPE_API_KEY': ''});
+    expect(c.hasApiKey, isFalse);
+    expect(c.requireApiKey, throwsA(isA<ConfigException>()));
+  });
+
+  test('explicit base_url is not replaced by workspace host', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(tmp, '{"base_url": "https://proxy.example/v1"}'),
+      env: {},
+    );
+    c.updateSecrets(<String, String?>{'DASHSCOPE_WORKSPACE_ID': 'ws-1'});
+    expect(c.baseUrl, 'https://proxy.example/v1');
+    expect(c.apiHost, contains('ws-1'));
+  });
+
+  test('oss flags follow the runtime secrets', () async {
+    final c = await PipelineConfig.load(
+      file: await writeConfig(tmp, '{}'),
+      env: {},
+    );
+    expect(c.hasOss, isFalse);
+    c.updateSecrets(<String, String?>{
+      'OSS_ACCESS_KEY_ID': 'id',
+      'OSS_ACCESS_KEY_SECRET': 'secret',
+    });
+    expect(c.hasOss, isTrue);
+  });
 }

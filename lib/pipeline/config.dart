@@ -18,7 +18,7 @@ class ConfigException implements Exception {
 /// in it — they are read from the environment only, via [requireApiKey] and
 /// the OSS credential getters.
 class PipelineConfig {
-  const PipelineConfig({
+  PipelineConfig({
     required this.llmModel,
     required this.ttsModel,
     required this.ttsFallbackModel,
@@ -51,10 +51,12 @@ class PipelineConfig {
     this.imageDefaultModel = 'qwen-image-3.0-pro',
     this.imagePrices = const <String, Map<String, double>>{},
     this.videoPrices = const <String, Map<String, double>>{},
-    this.workspaceId = '',
-    this.baseUrl = defaultBaseUrl,
+    String workspaceId = '',
+    String? baseUrl,
     Map<String, String>? env,
-  }) : _env = env ?? const <String, String>{};
+  }) : _configuredWorkspaceId = workspaceId,
+       _configuredBaseUrl = baseUrl,
+       _env = Map<String, String>.of(env ?? const <String, String>{});
 
   static const String defaultBaseUrl =
       'https://dashscope.aliyuncs.com/compatible-mode/v1';
@@ -96,9 +98,6 @@ class PipelineConfig {
     final oss = _section(json, 'oss');
     final video = _section(json, 'video');
     final workspaceId = _string(json, 'workspace_id', '');
-    final host = workspaceId.isEmpty
-        ? defaultApiHost
-        : 'https://$workspaceId.cn-beijing.maas.aliyuncs.com';
     return PipelineConfig(
       llmModel: _string(llm, 'model', 'qwen3.8-flash'),
       ttsModel: _string(tts, 'model', 'qwen-audio-3.1-tts-flash'),
@@ -137,7 +136,7 @@ class PipelineConfig {
       targetCount: _int(video, 'target_count', 4),
       minClipS: _int(video, 'min_clip_s', 2),
       maxClipS: _int(video, 'max_clip_s', 15),
-      baseUrl: _string(json, 'base_url', '$host/compatible-mode/v1'),
+      baseUrl: _nullableString(json, 'base_url'),
       env: env ?? Platform.environment,
     );
   }
@@ -190,19 +189,48 @@ class PipelineConfig {
   /// `pricing.video.<model>.<分辨率> = 元/秒`（空 = 全部用目录默认价）。
   final Map<String, Map<String, double>> videoPrices;
 
-  final String baseUrl;
+  /// 显式配置的 base_url；空则由 [apiHost] 派生。
+  final String? _configuredBaseUrl;
 
-  /// 百炼业务空间 ID（空 = 默认空间，走 [defaultApiHost]）。配置后所有
-  /// DashScope 系端点（LLM/TTS/i2v/上传）都切换到工作空间主机。
-  final String workspaceId;
+  /// 配置文件里的 workspace ID；运行时密钥可覆盖。
+  final String _configuredWorkspaceId;
 
-  /// 所有 DashScope 系 API 的主机：配置了 [workspaceId] 时为
+  /// 所有 DashScope 系 API 的主机：配置了工作空间 ID 时为
   /// `https://<id>.cn-beijing.maas.aliyuncs.com`，否则 [defaultApiHost]。
-  String get apiHost => workspaceId.isEmpty
+  String get apiHost => effectiveWorkspaceId.isEmpty
       ? defaultApiHost
-      : 'https://$workspaceId.cn-beijing.maas.aliyuncs.com';
+      : 'https://$effectiveWorkspaceId.cn-beijing.maas.aliyuncs.com';
+
+  /// 运行时密钥里的 workspace 优先于配置文件。
+  String get effectiveWorkspaceId =>
+      _env['DASHSCOPE_WORKSPACE_ID'] ?? _configuredWorkspaceId;
+
+  /// 百炼业务空间 ID（空 = 默认空间）。运行时可通过设置页覆盖。
+  String get workspaceId => effectiveWorkspaceId;
+
+  /// LLM 兼容接口地址；显式配置优先，否则跟随 [apiHost]。
+  String get baseUrl =>
+      _configuredBaseUrl ?? '$apiHost/compatible-mode/v1';
 
   final Map<String, String> _env;
+
+  /// 运行时密钥覆盖：null / 空串表示清除。
+  void updateSecrets(Map<String, String?> values) {
+    for (final entry in values.entries) {
+      final value = entry.value;
+      if (value == null || value.isEmpty) {
+        _env.remove(entry.key);
+      } else {
+        _env[entry.key] = value;
+      }
+    }
+  }
+
+  bool get hasApiKey => (_env['DASHSCOPE_API_KEY'] ?? '').isNotEmpty;
+
+  bool get hasOss =>
+      (_env['OSS_ACCESS_KEY_ID'] ?? '').isNotEmpty &&
+      (_env['OSS_ACCESS_KEY_SECRET'] ?? '').isNotEmpty;
 
   /// Returns `DASHSCOPE_API_KEY` from the environment, or throws
   /// [ConfigException] when it is absent or empty.

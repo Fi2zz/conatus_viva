@@ -10,7 +10,7 @@ import 'package:flutter_wanxiang/pipeline/drama/store.dart';
 import 'package:flutter_wanxiang/server/pipeline_server.dart';
 import 'package:test/test.dart';
 
-const _cfg = PipelineConfig(
+final _cfg = PipelineConfig(
   llmModel: 'qwen3.8-flash',
   ttsModel: 'qwen-audio-3.1-tts-flash',
   ttsFallbackModel: 'qwen3-tts-flash',
