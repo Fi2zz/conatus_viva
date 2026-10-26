@@ -100,7 +100,9 @@ export default function CastStage({ bundle, onBundle, onReload }: Props) {
             </button>
           )}
         </div>
-        {run.error !== "" && <div className="sd-alert">{run.error}</div>}
+        {(run.error !== "" || run.run?.error != null) && (
+          <div className="sd-alert">{run.error || run.run?.error}</div>
+        )}
         {run.run !== null && (
           <ul className="sd-run-log">
             {run.run.logs.slice(-8).map((line, index) => (

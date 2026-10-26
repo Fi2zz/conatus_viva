@@ -158,6 +158,7 @@ class DramaEstimateRequest {
     this.shotIds = const <String>[],
     this.target = DramaRunTarget.all,
     this.force = false,
+    this.degrade = false,
   });
 
   final DramaEstimateStep step;
@@ -165,6 +166,7 @@ class DramaEstimateRequest {
   final List<String> shotIds;
   final DramaRunTarget target;
   final bool force;
+  final bool degrade;
 }
 
 DramaEstimateRequest parseDramaEstimateRequest(Map<String, Object?> body) {
@@ -193,6 +195,7 @@ DramaEstimateRequest parseDramaEstimateRequest(Map<String, Object?> body) {
     shotIds: _stringList(body['shot_ids'], 'shot_ids'),
     target: target,
     force: body['force'] == null ? false : _bool(body['force'], 'force'),
+    degrade: body['degrade'] == null ? false : _bool(body['degrade'], 'degrade'),
   );
 }
 
@@ -391,8 +394,12 @@ void _estimateFrame({
       );
     }
     if (!wantClip) continue;
-    final route = plan!.routeFor(shot.id);
-    final i2vSeconds = plan.i2vSecondsFor(shot.id);
+    final route = request.degrade
+        ? ShotRoute.kenburns
+        : plan!.routeFor(shot.id);
+    final i2vSeconds = route == ShotRoute.i2v
+        ? plan!.i2vSecondsFor(shot.id)
+        : 0;
     final clipHash = dramaClipHash(
       shot: shot,
       frameHash: frameHash,
@@ -401,15 +408,34 @@ void _estimateFrame({
       resolution: resolution,
       i2vSeconds: i2vSeconds,
     );
+    final degradedHash = route == ShotRoute.i2v
+        ? dramaClipHash(
+            shot: shot,
+            frameHash: frameHash,
+            route: ShotRoute.kenburns.name,
+            model: 'ffmpeg',
+            resolution: resolution,
+            i2vSeconds: 0,
+          )
+        : null;
     if (!request.force &&
-        _clipCached(
-          store: store,
-          state: state,
-          seriesId: series.seriesId,
-          episodeId: episode.episodeId,
-          shotId: shot.id,
-          hash: clipHash,
-        )) {
+        (_clipCached(
+              store: store,
+              state: state,
+              seriesId: series.seriesId,
+              episodeId: episode.episodeId,
+              shotId: shot.id,
+              hash: clipHash,
+            ) ||
+            (degradedHash != null &&
+                _clipCached(
+                  store: store,
+                  state: state,
+                  seriesId: series.seriesId,
+                  episodeId: episode.episodeId,
+                  shotId: shot.id,
+                  hash: degradedHash,
+                )))) {
       continue;
     }
     if (route == ShotRoute.i2v) {
@@ -428,7 +454,7 @@ void _estimateFrame({
         ),
       );
     } else {
-      final quantity = plan.durationFor(shot.id).ceilToDouble();
+      final quantity = plan!.durationFor(shot.id).ceilToDouble();
       items.add(
         DramaEstimateItem(
           kind: 'local',

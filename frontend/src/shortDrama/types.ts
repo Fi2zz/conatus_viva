@@ -208,6 +208,7 @@ export interface EstimateInput {
   shot_ids?: string[];
   target?: "frame" | "clip" | "all";
   force?: boolean;
+  degrade?: boolean;
 }
 
 export interface DramaRunItem {

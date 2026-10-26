@@ -222,6 +222,22 @@ void main() {
     expect(after.steps['cast']!.status, DramaStatus.interrupted);
   });
 
+  test('frame-only run works without a plan', () async {
+    store.writeStoryboard('jietiao', 'ep07', multiBoard());
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+      target: DramaRunTarget.frame,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.completed);
+    expect(gateway.imageCalls, 2);
+    expect(store.readPlanJson('jietiao', 'ep07'), isNull);
+  });
+
   test('frame run generates frames then i2v/local clips with costs', () async {
     store.writeStoryboard('jietiao', 'ep07', multiBoard());
     store.writePlanJson('jietiao', 'ep07', planJson());

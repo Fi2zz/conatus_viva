@@ -178,6 +178,16 @@ List<DramaStepView> deriveDramaSteps({
         resolution: resolution,
         i2vSeconds: i2vSeconds,
       );
+      final degradedHash = route == ShotRoute.i2v
+          ? dramaClipHash(
+              shot: shot,
+              frameHash: frameHash,
+              route: ShotRoute.kenburns.name,
+              model: 'ffmpeg',
+              resolution: resolution,
+              i2vSeconds: 0,
+            )
+          : null;
       final shotState = state.shots[shot.id];
       final frameArtifact = shotState?.frame;
       final clipArtifact = shotState?.clip;
@@ -186,14 +196,17 @@ List<DramaStepView> deriveDramaSteps({
           frameArtifact.sourceHash != frameHash) {
         frameStale = true;
       }
+      final clipCurrent = clipArtifact != null &&
+          clipArtifact.status == DramaStatus.succeeded &&
+          (clipArtifact.sourceHash == clipHash ||
+              (degradedHash != null &&
+                  clipArtifact.sourceHash == degradedHash));
       if (clipArtifact != null &&
           clipArtifact.status == DramaStatus.succeeded &&
-          clipArtifact.sourceHash != clipHash) {
+          !clipCurrent) {
         frameStale = true;
       }
-      if (clipArtifact != null &&
-          clipArtifact.status == DramaStatus.succeeded &&
-          clipArtifact.sourceHash == clipHash) {
+      if (clipCurrent) {
         doneClips += 1;
       }
       frameCost += (frameArtifact?.costYuan ?? 0) + (clipArtifact?.costYuan ?? 0);

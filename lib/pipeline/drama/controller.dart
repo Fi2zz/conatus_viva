@@ -201,15 +201,15 @@ class DramaController {
         case DramaRoute.runShot:
           await _runShot(req, seriesId!, episodeId!, segments[7]);
         case DramaRoute.runStatus:
-          await _getRun(req, episodeId!, segments[7]);
+          await _getRun(req, seriesId!, episodeId!, segments[7]);
         case DramaRoute.cancelRun:
-          await _cancelRun(req, episodeId!, segments[7]);
+          await _cancelRun(req, seriesId!, episodeId!, segments[7]);
         case DramaRoute.asset:
           await _getAsset(
             req,
             seriesId!,
             episodeId!,
-            segments.sublist(7).join('/'),
+            segments.sublist(6).join('/'),
           );
         case DramaRoute.seriesAsset:
           await _getSeriesAsset(req, seriesId!, segments.sublist(5).join('/'));
@@ -597,6 +597,7 @@ class DramaController {
         shotIds: <String>[shotId],
         target: target,
         force: force,
+        degrade: degrade,
       ),
       pricing: pricing,
       store: store,
@@ -627,11 +628,14 @@ class DramaController {
 
   Future<void> _getRun(
     HttpRequest req,
+    String seriesId,
     String episodeId,
     String runId,
   ) async {
     final run = runner?.run(runId);
-    if (run == null) {
+    if (run == null ||
+        run.seriesId != seriesId ||
+        run.episodeId != episodeId) {
       await _error(req, HttpStatus.notFound, 'run 不存在', 'not_found');
       return;
     }
@@ -640,6 +644,7 @@ class DramaController {
 
   Future<void> _cancelRun(
     HttpRequest req,
+    String seriesId,
     String episodeId,
     String action,
   ) async {
@@ -648,7 +653,10 @@ class DramaController {
       return;
     }
     final runId = action.split(':').first;
-    if (runner!.run(runId) == null) {
+    final run = runner!.run(runId);
+    if (run == null ||
+        run.seriesId != seriesId ||
+        run.episodeId != episodeId) {
       await _error(req, HttpStatus.notFound, 'run 不存在', 'not_found');
       return;
     }
@@ -671,6 +679,14 @@ class DramaController {
       await _error(req, HttpStatus.badRequest, '${e.message}', 'path_escape');
       return;
     }
+    final assetsRoot = Directory(
+      '${store.episodeDir(seriesId, episodeId)}/assets',
+    ).absolute.path;
+    if (!relativePath.startsWith('assets/') ||
+        !file.absolute.path.startsWith('$assetsRoot/')) {
+      await _error(req, HttpStatus.badRequest, 'path escape', 'path_escape');
+      return;
+    }
     await _sendFile(req, file);
   }
 
@@ -684,6 +700,14 @@ class DramaController {
       file = store.seriesAssetFile(seriesId, relativePath);
     } on ArgumentError catch (e) {
       await _error(req, HttpStatus.badRequest, '${e.message}', 'path_escape');
+      return;
+    }
+    final castRoot = Directory(
+      '${store.seriesDir(seriesId)}/cast',
+    ).absolute.path;
+    if (!relativePath.startsWith('cast/') ||
+        !file.absolute.path.startsWith('$castRoot/')) {
+      await _error(req, HttpStatus.badRequest, 'path escape', 'path_escape');
       return;
     }
     await _sendFile(req, file);

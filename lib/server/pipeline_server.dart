@@ -7,7 +7,6 @@ import 'package:flutter_wanxiang/pipeline/bailian/wan30_video.dart';
 import 'package:flutter_wanxiang/pipeline/config.dart';
 import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
 import 'package:flutter_wanxiang/pipeline/drama/controller.dart';
-import 'package:flutter_wanxiang/pipeline/drama/cost.dart';
 import 'package:flutter_wanxiang/pipeline/drama/llm.dart';
 import 'package:flutter_wanxiang/pipeline/drama/media_gateway.dart';
 import 'package:flutter_wanxiang/pipeline/drama/pricing.dart';
@@ -233,7 +232,7 @@ class PipelineServer {
           drafts: DramaDraftService(
             llm: dramaLlm ?? QwenDramaLlm(cfg: cfg),
           ),
-          priceYuanPerSecond: defaultDramaI2vPriceYuanPerSecond(),
+          priceYuanPerSecond: pricing.i2vYuanPerSecond,
           pricing: pricing,
           runner: DramaRunner(
             store: store,

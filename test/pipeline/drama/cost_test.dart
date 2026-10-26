@@ -245,6 +245,31 @@ void main() {
     expect(plan.totals.estimatedYuan, 0.45);
   });
 
+  test('degrade prices the clip as a zero-cost local render', () {
+    final s = series();
+    final estimate = estimateDrama(
+      series: s,
+      episode: episode(s: s),
+      state: DramaEpisodeState.empty('jietiao', 'ep07'),
+      storyboard: board(),
+      planJson: planJson(),
+      request: const DramaEstimateRequest(
+        step: DramaEstimateStep.frame,
+        target: DramaRunTarget.clip,
+        degrade: true,
+      ),
+      pricing: pricing(),
+      store: store,
+    );
+    expect(estimate.items.where((item) => item.kind == 'clip'), isEmpty);
+    expect(
+      estimate.items.firstWhere((item) => item.kind == 'local').subtotalYuan,
+      0,
+    );
+    expect(estimate.i2vEstimatedYuan, 0);
+    expect(estimate.totalEstimatedYuan, closeTo(0.35, 0.001));
+  });
+
   test('new estimate request rejects unknown steps and bad target', () {
     expect(
       () => parseDramaEstimateRequest(<String, Object?>{'step': 'voice'}),

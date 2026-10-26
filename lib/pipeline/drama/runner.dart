@@ -68,7 +68,7 @@ class DramaRunner {
       if (board == null) {
         throw StateError('storyboard_required');
       }
-      if (planJson == null) {
+      if (target != DramaRunTarget.frame && planJson == null) {
         throw StateError('plan_required');
       }
     }
@@ -106,7 +106,9 @@ class DramaRunner {
     final board = store.readStoryboard(seriesId, episodeId);
     final planJson = store.readPlanJson(seriesId, episodeId);
     if (board == null) throw StateError('storyboard_required');
-    if (planJson == null) throw StateError('plan_required');
+    if (target != DramaRunTarget.frame && planJson == null) {
+      throw StateError('plan_required');
+    }
     if (!board.shots.any((shot) => shot.id == shotId)) {
       throw ArgumentError.value(shotId, 'shot_id', 'unknown shot');
     }
@@ -197,7 +199,7 @@ class DramaRunner {
             run: run,
             series: series,
             board: board!,
-            planJson: planJson!,
+            planJson: planJson,
             shotIds: shotIds,
             target: target,
             force: force,
@@ -354,7 +356,7 @@ class DramaRunner {
     required DramaRun run,
     required DramaSeries series,
     required Storyboard board,
-    required Map<String, Object?> planJson,
+    required Map<String, Object?>? planJson,
     required List<String> shotIds,
     required DramaRunTarget target,
     required bool force,
@@ -362,7 +364,7 @@ class DramaRunner {
     required DramaEpisodeState state,
   }) async {
     var currentState = state;
-    final plan = DramaPlanView(planJson);
+    final plan = planJson == null ? null : DramaPlanView(planJson);
     final selected = shotIds.isEmpty
         ? board.shots
         : <Shot>[
@@ -489,8 +491,8 @@ class DramaRunner {
       if (frame.status != DramaStatus.succeeded || frame.path == null) {
         continue;
       }
-      final route = degrade ? ShotRoute.kenburns : plan.routeFor(shot.id);
-      final rawSeconds = plan.i2vSecondsFor(shot.id);
+      final route = degrade ? ShotRoute.kenburns : plan!.routeFor(shot.id);
+      final rawSeconds = plan!.i2vSecondsFor(shot.id);
       final i2vSeconds = route == ShotRoute.i2v
           ? (rawSeconds < 2 ? 2 : rawSeconds)
           : 0;
@@ -502,14 +504,32 @@ class DramaRunner {
         resolution: resolution,
         i2vSeconds: i2vSeconds,
       );
+      final degradedHash = route == ShotRoute.i2v
+          ? dramaClipHash(
+              shot: shot,
+              frameHash: frameHash,
+              route: ShotRoute.kenburns.name,
+              model: 'ffmpeg',
+              resolution: resolution,
+              i2vSeconds: 0,
+            )
+          : null;
       if (!force &&
-          _clipCached(
-            seriesId: run.seriesId,
-            episodeId: run.episodeId,
-            shotId: shot.id,
-            hash: clipHash,
-            state: currentState,
-          )) {
+          (_clipCached(
+                seriesId: run.seriesId,
+                episodeId: run.episodeId,
+                shotId: shot.id,
+                hash: clipHash,
+                state: currentState,
+              ) ||
+              (degradedHash != null &&
+                  _clipCached(
+                    seriesId: run.seriesId,
+                    episodeId: run.episodeId,
+                    shotId: shot.id,
+                    hash: degradedHash,
+                    state: currentState,
+                  )))) {
         run.items.add(
           DramaRunItem(
             id: shot.id,

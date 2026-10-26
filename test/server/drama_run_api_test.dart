@@ -213,7 +213,7 @@ void main() {
     final asset = await _send(
       port,
       'GET',
-      '/api/drama/series/jietiao/episodes/ep07/assets/$path',
+      '/api/drama/series/jietiao/episodes/ep07/assets/${path.substring('assets/'.length)}',
     );
     expect(asset.status, 200);
   });
@@ -273,6 +273,30 @@ void main() {
     );
     expect(res.status, 409);
     expect((jsonDecode(res.body) as Map<String, dynamic>)['code'], 'budget_exceeded');
+  });
+
+  test('read/cancel a run from another episode is 404', () async {
+    final start = await _send(
+      port,
+      'POST',
+      '/api/drama/series/jietiao/episodes/ep07/steps/frame:run',
+      <String, Object?>{'target': 'frame'},
+    );
+    expect(start.status, 202);
+    final runId = (jsonDecode(start.body) as Map<String, dynamic>)['run_id'];
+    final wrongRead = await _send(
+      port,
+      'GET',
+      '/api/drama/series/other/episodes/ep07/runs/$runId',
+    );
+    expect(wrongRead.status, 404);
+    final wrongCancel = await _send(
+      port,
+      'POST',
+      '/api/drama/series/other/episodes/ep07/runs/$runId:cancel',
+      <String, Object?>{},
+    );
+    expect(wrongCancel.status, 404);
   });
 
   test('second concurrent run is 409 episode_busy', () async {

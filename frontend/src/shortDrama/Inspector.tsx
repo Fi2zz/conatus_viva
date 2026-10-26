@@ -2,7 +2,7 @@
 import type { PlanShot, ShotKind } from "./model";
 import { formatSeconds, formatYuan, routeLabel } from "./model";
 import { episodeAssetUrl } from "./asset";
-import type { DramaShotState, StoryboardShot, StepView } from "./types";
+import type { DramaArtifact, DramaShotState, StoryboardShot, StepView } from "./types";
 import { stepStatusLabel } from "./view";
 
 const KIND_LABELS: Record<ShotKind, string> = {
@@ -12,6 +12,25 @@ const KIND_LABELS: Record<ShotKind, string> = {
   action: "动作",
   establishing: "定场",
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "待生成",
+  running: "运行中",
+  succeeded: "已完成",
+  failed: "失败",
+  stale: "已过期",
+  skipped: "已跳过",
+  interrupted: "已中断",
+};
+
+function artifactLabel(artifact: DramaArtifact | undefined): string {
+  return artifact === undefined ? "待生成" : (STATUS_LABELS[artifact.status] ?? artifact.status);
+}
+
+function shortHash(artifact: DramaArtifact | undefined): string {
+  const hash = artifact?.source_hash;
+  return hash === null || hash === undefined ? "—" : hash.slice(0, 14);
+}
 
 interface Props {
   step: StepView;
@@ -105,12 +124,28 @@ export default function Inspector({
             </div>
             <div>
               <dt>首帧状态</dt>
-              <dd>{shotState?.frame.status ?? "待生成"}</dd>
+              <dd>{artifactLabel(shotState?.frame)}</dd>
             </div>
             <div>
               <dt>片段状态</dt>
-              <dd>{shotState?.clip.status ?? "待生成"}</dd>
+              <dd>{artifactLabel(shotState?.clip)}</dd>
             </div>
+            <div>
+              <dt>缓存键</dt>
+              <dd className="mono">{shortHash(shotState?.clip)}</dd>
+            </div>
+            {shotState?.frame.error != null && (
+              <div>
+                <dt>首帧错误</dt>
+                <dd>{shotState.frame.error}</dd>
+              </div>
+            )}
+            {shotState?.clip.error != null && (
+              <div>
+                <dt>片段错误</dt>
+                <dd>{shotState.clip.error}</dd>
+              </div>
+            )}
             <div>
               <dt>本镜成本</dt>
               <dd className="mono">

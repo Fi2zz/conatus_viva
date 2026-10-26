@@ -83,6 +83,7 @@ export default function FrameStage({
           target: next.target,
           shot_ids: next.shotId === null ? undefined : [next.shotId],
           force: next.force,
+          degrade: next.degrade,
         },
       );
       setPending(next);
@@ -140,7 +141,9 @@ export default function FrameStage({
             </button>
           )}
         </div>
-        {run.error !== "" && <div className="sd-alert">{run.error}</div>}
+        {(run.error !== "" || run.run?.error != null) && (
+          <div className="sd-alert">{run.error || run.run?.error}</div>
+        )}
         {run.run !== null && (
           <ul className="sd-run-log">
             {run.run.logs.slice(-10).map((line, index) => (
@@ -292,7 +295,7 @@ export default function FrameStage({
             <button
               type="button"
               className="sd-btn"
-              disabled={run.busy}
+              disabled={run.busy || bundle.plan === null}
               onClick={() =>
                 void ask({
                   shotId: selected.id,

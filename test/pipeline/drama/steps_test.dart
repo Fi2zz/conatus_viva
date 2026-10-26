@@ -247,4 +247,61 @@ void main() {
     );
     expect(find(stale, DramaStep.frame).status, DramaStatus.stale);
   });
+
+  test('a degraded clip is treated as current, not stale', () {
+    final s = series();
+    final b = board();
+    final episode = DramaEpisode.create(series: s, episodeId: 'ep07', title: 'x');
+    final shot = b.shots.single;
+    final avatarHash = s.cast['erniu']!.avatar!.sourceHash;
+    final frameHash = dramaFrameHash(
+      shot: shot,
+      castAvatarHash: avatarHash,
+      model: 'wan2.7-image',
+      size: '1K',
+    );
+    final degradedHash = dramaClipHash(
+      shot: shot,
+      frameHash: frameHash,
+      route: 'kenburns',
+      model: 'ffmpeg',
+      resolution: '720P',
+      i2vSeconds: 0,
+    );
+    final plan = <String, Object?>{
+      'shots': <Object?>[
+        <String, Object?>{
+          'shot_id': 's01',
+          'route': 'i2v',
+          'i2v_seconds': 3,
+          'duration_s': 3.2,
+        },
+      ],
+    };
+    final state = DramaEpisodeState.empty('jietiao', 'ep07').withShot(
+      's01',
+      DramaShotState(
+        frame: DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: 'assets/frames/s01/$frameHash/image-01.png',
+          sourceHash: frameHash,
+        ),
+        clip: DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: 'assets/clips/s01/$degradedHash.mp4',
+          sourceHash: degradedHash,
+          model: 'ffmpeg',
+        ),
+      ),
+    );
+    final steps = deriveDramaSteps(
+      series: s,
+      episode: episode,
+      storyboard: b,
+      planJson: plan,
+      state: state,
+      wired: kDramaWiredSteps,
+    );
+    expect(find(steps, DramaStep.frame).status, DramaStatus.succeeded);
+  });
 }
