@@ -731,13 +731,13 @@ App
 
 ## 12. Definition of Done（P1）
 
-- [ ] 新建剧/集、读取整包、保存故事/分镜、计划单重算全部可用。
-- [ ] 工作台三栏与 8 工序按原型落地；未接入工序无假状态。
-- [ ] 五个旧 tab 删除，五项能力从工序可达且行为不回退。
-- [ ] 费用闸门展示服务端估算；未估价项要求勾选。
-- [ ] `make analyze` 零告警；`make test-dart` 全绿。
-- [ ] `npm test && npm run lint && npm run build` 通过；`make web` 已提交。
-- [ ] 不新增依赖；不提交 `pipeline_out/`、`.env`、密钥。
+- [x] 新建剧/集、读取整包、保存故事/分镜、计划单重算全部可用。
+- [x] 工作台三栏与 8 工序按原型落地；未接入工序无假状态。
+- [x] 五个旧 tab 删除，五项能力从工序可达且行为不回退。
+- [x] 费用闸门展示服务端估算；未估价项要求勾选。
+- [x] `make analyze` 零告警；`make test-dart` 全绿。
+- [x] `npm test && npm run lint && npm run build` 通过；`make web` 已提交。
+- [x] 不新增依赖；不提交 `pipeline_out/`、`.env`、密钥。
 
 ## 13. 2026-10-26 修订（P2 / 设置入口）
 

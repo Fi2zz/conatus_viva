@@ -1803,12 +1803,12 @@ git commit -m "feat(web): 五能力进驻短剧工作台"
 
 ## 验收清单
 
-- [ ] `make analyze` 零告警。
-- [ ] `make test-dart` 全绿（含 `test/pipeline/drama/**`、`test/server/drama_api_test.dart`）。
-- [ ] `cd frontend && npm test && npm run lint && npm run check:dialogs && npm run build` 全绿。
-- [ ] `make web` 后 `web_build/` 已更新并提交。
-- [ ] 新建剧/集、保存故事、拆片、生成分镜、编辑、保存、计划单重算全部可用。
-- [ ] 未接入工序显示「未接入」，`run` 返回 501。
-- [ ] 无剧/无集/无分镜空态不白屏。
-- [ ] `git status` 不含 `pipeline_out/`、`.env`、密钥、无关 WIP。
-- [ ] 提交信息符合 Conventional Commits + 中文描述 + scope。
+- [x] `make analyze` 零告警。
+- [x] `make test-dart` 全绿（含 `test/pipeline/drama/**`、`test/server/drama_api_test.dart`）。
+- [x] `cd frontend && npm test && npm run lint && npm run check:dialogs && npm run build` 全绿。
+- [x] `make web` 后 `web_build/` 已更新并提交。
+- [x] 新建剧/集、保存故事、拆片、生成分镜、编辑、保存、计划单重算全部可用。
+- [x] 未接入工序显示「未接入」，`run` 返回 501。
+- [x] 无剧/无集/无分镜空态不白屏。
+- [x] `git status` 不含 `pipeline_out/`、`.env`、密钥、无关 WIP。
+- [x] 提交信息符合 Conventional Commits + 中文描述 + scope。
