@@ -508,6 +508,7 @@ git commit -m "feat(short-drama): 产物 hash、计划单视图与状态增量�
   - `typedef ImageUnitPrice = double Function(String model, String tier);`
   - `typedef VideoUnitPrice = double Function(String model, String resolution);`
   - `class DramaPricing { const DramaPricing({required this.i2vYuanPerSecond, required this.imagePrice, required this.videoPrice}); final double i2vYuanPerSecond; final ImageUnitPrice imagePrice; final VideoUnitPrice videoPrice; }`
+  - `DramaPricing dramaPricingFromConfig(PipelineConfig cfg)`（按 `cfg.imagePrices` / `cfg.videoPrices` 解析，目录价兜底）
   - `enum DramaRunTarget { frame, clip, all }`（文件 `lib/pipeline/drama/run_target.dart`）
   - `enum DramaEstimateStep { story, storyboard, cast, frame }`
   - `class DramaEstimateRequest { const DramaEstimateRequest({required this.step, this.castIds = const [], this.shotIds = const [], this.target = DramaRunTarget.all, this.force = false}); }`
@@ -884,6 +885,7 @@ Expected: FAIL。
 - `_runShot`：校验 shot 存在；body `target` 默认 all；`degrade`；同样预算检查。
 - `_getRun` / `_cancelRun`：404 / 200。
 - `_asset`：`store.assetFile` / `seriesAssetFile`；扩展名白名单 png/jpg/webp/mp4/wav；目录或未知扩展 404；逃逸 400。
+- `PipelineServer` 的默认构造：用 `dramaPricingFromConfig(cfg)`、`DashScopeDramaMediaGateway(cfg: cfg, pricing: pricing)`、`DramaRunner(store: store, gateway: gateway)` 组装 `DramaController`；`dramaController` 测试 seam 优先。
 - `_bundle` 先 `runner.recoverOrphan`；`wired` 用 `runner == null ? kP1WiredSteps : kDramaWiredSteps`；capabilities cast/frame 随 runner 可用。
 - `deriveDramaSteps`：cast/frame 的 `status` 支持 `stale`（artifact hash 与当前 hash 不一致）；`cost_yuan` 从 artifact 求和；frame 完成 = 所有镜头 clip 成功且 hash 一致。
 
