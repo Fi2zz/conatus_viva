@@ -15,7 +15,7 @@
 
 ```bash
 make            # 列出全部命令
-make setup      # 从示例创建 .env / pipeline_config.json（已存在则跳过）
+make setup      # 从示例创建 pipeline_config.json（已存在则跳过）
 make deps       # flutter pub get + 前端 npm ci
 make web        # 构建前端到 web_build/
 make run        # 构建前端并启动 macOS 桌面 app
@@ -32,7 +32,7 @@ make clean      # flutter clean + 删除前端 node_modules
 # 1. 配置：复制模板，按需填写 workspace_id（百炼业务空间 ID，控制台可查）
 cp pipeline_config.example.json pipeline_config.json
 
-# 2. 密钥（只走环境变量，不落任何文件）
+# 2. 密钥（CLI 走进程环境变量；桌面 app 走设置页，不读 .env）
 export DASHSCOPE_API_KEY=sk-...
 
 # 3. 干跑：只到配音，返回分段路由与成本预估，不渲染
@@ -119,9 +119,8 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 `lib/main.dart` 是桌面壳：启动内嵌 HTTP server，WebView 加载打包进来的 React 前端。填主题、选方言、定时长（2–30 秒），生成带卡通主讲人（左下角头像叠加）的方言口播视频，页内预览并下载 mp4。
 
 ```bash
-# 密钥：app 从打包的 .env 读 DASHSCOPE_API_KEY（Finder 双击启动也有；
-# 进程环境变量优先于 .env）
-cp .env.example .env && $EDITOR .env
+# 密钥：打开 app 后点右下角「设置」，填入 DASHSCOPE_API_KEY。
+# macOS 存系统钥匙串；其他平台存用户目录下 0600 文件。应用不读 .env。
 
 flutter run -d macos   # 也有 windows/ 工程
 ```
@@ -181,7 +180,7 @@ lib/server/
   pipeline_server.dart 内嵌 HTTP server（方言选项 / t2v 生成 / 状态查询 / 视频下载）
   api_router.dart     /api/* 纯函数路由分发
   web_build_assets.dart  把打包的 web_build/ 物化到本地目录
-lib/speaker_tool/     主讲人工具的模型层（方言选项、表单、头像、.env 封装）
+lib/speaker_tool/     主讲人工具的模型层（方言选项、表单、头像）
 bin/conatus_host.dart      实验 CLI
 frontend/             React 前端（方言配音主讲人 UI），构建产物在 web_build/
 ```

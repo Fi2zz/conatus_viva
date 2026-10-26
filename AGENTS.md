@@ -26,7 +26,7 @@
 | `lib/pipeline/bailian/` | 百炼客户端（llm / tts / i2v / wan30 / image / uploader） | 只加协议适配，不放业务规则 |
 | `lib/pipeline/steps/` | 六步流水线：ingest → classify/select → script → tts → render → compose | 步级幂等，产物存在即跳过 |
 | `lib/server/` | 内嵌 HTTP server（`apiRouteFor` 纯函数路由） | 只绑 loopback |
-| `lib/speaker_tool/` | 主讲人工具的模型层（表单 / 头像 / .env） | 可依赖 Flutter |
+| `lib/speaker_tool/` | 主讲人工具的模型层（表单 / 头像） | 可依赖 Flutter |
 | `frontend/` | React 19 + TS + Vite 8 + oxlint + vitest | 只经 HTTP 与 server 交互 |
 | `web_build/` | 前端构建产物（**入库**） | 改前端后必须 `make web` 并提交 |
 | `test/pipeline/`、`test/server/` | 离线测试 | 禁止真实网络 |
@@ -47,8 +47,8 @@
 4. `state.json` 幂等与「产物存在即跳过」契约不可绕过；重跑同 `content-id` 必须从断点续跑，
    已成功步骤不重复扣费。
 5. 「失败不计费」语义保持：审核拒答降级 Ken Burns 且零计费；重试 / 降级不得破坏该语义。
-6. 密钥只走环境变量（`DASHSCOPE_API_KEY`；OSS 回退另需 `OSS_ACCESS_KEY_ID` /
-   `OSS_ACCESS_KEY_SECRET`）。`.env`、`pipeline_config.json`、`pipeline_out/` 不入库；
+6. 密钥只来自设置入口：macOS 系统钥匙串，其他平台用户目录 0600 文件；**不读取 `.env`**。
+   进程环境仅 CLI/CI 显式注入。`pipeline_config.json`、`pipeline_out/` 不入库；
    **禁止打印、记录、回显任何 key**。
 7. HTTP server 只绑 `InternetAddress.loopbackIPv4`；不得改成 `0.0.0.0`，不得暴露公网。
 8. 前端只经本地 HTTP server 访问百炼能力；不得直连厂商 API；不得用 `window.confirm/alert`
@@ -60,7 +60,7 @@
 
 ```bash
 make                 # 列出全部目标
-make setup           # 从示例创建 .env / pipeline_config.json（已存在则跳过）
+make setup           # 从示例创建 pipeline_config.json（已存在则跳过）
 make deps            # flutter pub get + 前端 npm ci
 make web             # 构建前端到 web_build/
 make run             # 构建前端并启动 macOS 桌面 app
@@ -155,7 +155,7 @@ cd frontend && npm run lint     # oxlint
 
 ## 10. 提交前检查清单
 
-- [ ] `git status` 只包含本次预期文件（没有误加 WIP / `pipeline_out/` / `.env` / 密钥）
+- [ ] `git status` 只包含本次预期文件（没有误加 WIP / `pipeline_out/` / 密钥文件）
 - [ ] `make analyze` 零告警
 - [ ] 改动的 Dart 测试通过（`make test-dart` 或对应单测）
 - [ ] 改前端：`npm test && npm run lint` 通过，且已 `make web` 并提交 `web_build/`
