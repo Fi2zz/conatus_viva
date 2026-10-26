@@ -47,6 +47,8 @@
 - 只有 `target != frame` 才要求计划单；无计划也可以生成首帧。
 - `priceYuanPerSecond` 改用配置解析后的 `pricing.i2vYuanPerSecond`，计划单与估算一致。
 - `runs/<id>` 读取/取消校验 series/episode 归属，跨集访问 404。
-- Inspector 显示中文产物状态、hash 短码与错误；运行失败时面板显示 `run.error || run.error`。
+- Inspector 显示中文产物状态、hash 短码与错误；运行失败时面板显示 `run.error || run.run.error`。
 - 设置按钮上移到右下角底部栏上方，避免遮挡「导出 / 投放包」。
+- 旧图片/视频接口的缺 key 文案改为「请在「设置」中填写」。
+- `failed / interrupted` 工序状态不再遮蔽已推导成功的状态；推导仍为 pending 时才显示失败。
 
