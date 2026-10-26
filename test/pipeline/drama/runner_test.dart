@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_wanxiang/pipeline/drama/episode.dart';
 import 'package:flutter_wanxiang/pipeline/drama/runner.dart';
+import 'package:flutter_wanxiang/pipeline/drama/run_target.dart';
 import 'package:flutter_wanxiang/pipeline/drama/series.dart';
 import 'package:flutter_wanxiang/pipeline/drama/state.dart';
 import 'package:flutter_wanxiang/pipeline/drama/steps.dart';
@@ -39,6 +40,48 @@ Storyboard board() => Storyboard.fromJson(<String, Object?>{
     },
   ],
 });
+
+Storyboard multiBoard({String s02Visual = '院门口'}) =>
+    Storyboard.fromJson(<String, Object?>{
+      'content_id': 'ep07',
+      'cast': <String, Object?>{'erniu': <String, Object?>{'name': '二舅'}},
+      'shots': <Object?>[
+        <String, Object?>{
+          'id': 's01',
+          'kind': 'action',
+          'speaker': 'erniu',
+          'line': '',
+          'duration_s': 3,
+          'priority': 'hook',
+          'visual': '借条特写',
+        },
+        <String, Object?>{
+          'id': 's02',
+          'kind': 'establishing',
+          'line': '',
+          'duration_s': 2,
+          'priority': 'normal',
+          'visual': s02Visual,
+        },
+      ],
+    });
+
+Map<String, Object?> planJson() => <String, Object?>{
+  'shots': <Object?>[
+    <String, Object?>{
+      'shot_id': 's01',
+      'route': 'i2v',
+      'i2v_seconds': 3,
+      'duration_s': 3.2,
+    },
+    <String, Object?>{
+      'shot_id': 's02',
+      'route': 'kenburns',
+      'i2v_seconds': 0,
+      'duration_s': 2,
+    },
+  ],
+};
 
 void main() {
   late Directory temp;
@@ -177,5 +220,94 @@ void main() {
     final after = store.readState('jietiao', 'ep07');
     expect(after.activeRunId, isNull);
     expect(after.steps['cast']!.status, DramaStatus.interrupted);
+  });
+
+  test('frame run generates frames then i2v/local clips with costs', () async {
+    store.writeStoryboard('jietiao', 'ep07', multiBoard());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway(imageCost: 0.2, clipCost: 0.45);
+    final r = runner(gateway);
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.completed);
+    expect(gateway.imageCalls, 2);
+    expect(gateway.clipCalls, 1);
+    expect(gateway.localCalls, 1);
+    final state = store.readState('jietiao', 'ep07');
+    expect(state.actualYuan, closeTo(0.85, 0.001));
+    expect(state.shots['s01']!.frame.status, DramaStatus.succeeded);
+    expect(state.shots['s01']!.clip.status, DramaStatus.succeeded);
+    expect(state.shots['s02']!.clip.status, DramaStatus.succeeded);
+    expect(
+      store.assetFile('jietiao', 'ep07', state.shots['s01']!.clip.path!)
+          .existsSync(),
+      isTrue,
+    );
+  });
+
+  test('changed storyboard re-runs only the affected shot', () async {
+    store.writeStoryboard('jietiao', 'ep07', multiBoard());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    )).done;
+    expect(gateway.imageCalls, 2);
+    store.writeStoryboard('jietiao', 'ep07', multiBoard(s02Visual: '院门口，雨'));
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    )).done;
+    expect(gateway.imageCalls, 3);
+    expect(gateway.localCalls, 2);
+  });
+
+  test('one failing shot does not stop the batch', () async {
+    store.writeStoryboard('jietiao', 'ep07', multiBoard());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway()..failImageCall = 2;
+    final r = runner(gateway);
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.failed);
+    final state = store.readState('jietiao', 'ep07');
+    expect(state.shots['s01']!.clip.status, DramaStatus.succeeded);
+    expect(state.shots['s02']!.frame.status, DramaStatus.failed);
+    expect(state.shots['s02']!.clip.status, DramaStatus.pending);
+  });
+
+  test('degrade forces a local clip for an i2v shot', () async {
+    store.writeStoryboard('jietiao', 'ep07', multiBoard());
+    store.writePlanJson('jietiao', 'ep07', planJson());
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+      target: DramaRunTarget.frame,
+    )).done;
+    final run = await r.startShot(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      shotId: 's01',
+      target: DramaRunTarget.clip,
+      degrade: true,
+    );
+    await run.done;
+    expect(gateway.clipCalls, 0);
+    expect(gateway.localCalls, 1);
   });
 }

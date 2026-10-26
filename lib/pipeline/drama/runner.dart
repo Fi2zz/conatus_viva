@@ -6,10 +6,12 @@ import 'dart:io';
 
 import '../config.dart';
 import '../generation_models.dart';
+import '../render_plan.dart';
 import '../storyboard.dart';
 import 'episode.dart';
 import 'hashes.dart';
 import 'media_gateway.dart';
+import 'plan_view.dart';
 import 'run_registry.dart';
 import 'run_target.dart';
 import 'series.dart';
@@ -62,8 +64,13 @@ class DramaRunner {
     final episode = store.readEpisode(seriesId, episodeId);
     final board = store.readStoryboard(seriesId, episodeId);
     final planJson = store.readPlanJson(seriesId, episodeId);
-    if (step == DramaStep.frame && planJson == null) {
-      throw StateError('plan_required');
+    if (step == DramaStep.frame) {
+      if (board == null) {
+        throw StateError('storyboard_required');
+      }
+      if (planJson == null) {
+        throw StateError('plan_required');
+      }
     }
     final run = _newRun(seriesId, episodeId, step);
     _runs.add(run);
@@ -78,6 +85,7 @@ class DramaRunner {
         shotIds: shotIds,
         target: target,
         force: force,
+        degrade: false,
       ),
     );
     return run;
@@ -91,25 +99,34 @@ class DramaRunner {
     bool force = false,
     bool degrade = false,
   }) async {
-    if (target == DramaRunTarget.frame) {
-      return startStep(
-        seriesId: seriesId,
-        episodeId: episodeId,
-        step: DramaStep.frame,
-        shotIds: <String>[shotId],
-        target: DramaRunTarget.frame,
-        force: force,
-      );
+    final active = _runs.activeFor(seriesId, episodeId);
+    if (active != null) throw StateError('episode_busy');
+    final series = store.readSeries(seriesId);
+    final episode = store.readEpisode(seriesId, episodeId);
+    final board = store.readStoryboard(seriesId, episodeId);
+    final planJson = store.readPlanJson(seriesId, episodeId);
+    if (board == null) throw StateError('storyboard_required');
+    if (planJson == null) throw StateError('plan_required');
+    if (!board.shots.any((shot) => shot.id == shotId)) {
+      throw ArgumentError.value(shotId, 'shot_id', 'unknown shot');
     }
-    // clip/all 由 Task 11 的 frame 执行器处理。
-    return startStep(
-      seriesId: seriesId,
-      episodeId: episodeId,
-      step: DramaStep.frame,
-      shotIds: <String>[shotId],
-      target: target,
-      force: force,
+    final run = _newRun(seriesId, episodeId, DramaStep.frame);
+    _runs.add(run);
+    unawaited(
+      _execute(
+        run: run,
+        series: series,
+        episode: episode,
+        board: board,
+        planJson: planJson,
+        castIds: const <String>[],
+        shotIds: <String>[shotId],
+        target: target,
+        force: force,
+        degrade: degrade,
+      ),
     );
+    return run;
   }
 
   void recoverOrphan(String seriesId, String episodeId) {
@@ -154,6 +171,7 @@ class DramaRunner {
     required List<String> shotIds,
     required DramaRunTarget target,
     required bool force,
+    required bool degrade,
   }) async {
     var state = store.readState(run.seriesId, run.episodeId);
     state = _startStep(state, run);
@@ -175,9 +193,20 @@ class DramaRunner {
           status = result.status;
           error = result.error;
         case DramaStep.frame:
-          // Task 11 实现；这里保留显式失败，避免假完成。
-          status = DramaStatus.failed;
-          error = '画面执行器尚未接入';
+          final result = await _runFrame(
+            run: run,
+            series: series,
+            board: board!,
+            planJson: planJson!,
+            shotIds: shotIds,
+            target: target,
+            force: force,
+            degrade: degrade,
+            state: state,
+          );
+          state = result.state;
+          status = result.status;
+          error = result.error;
         default:
           status = DramaStatus.failed;
           error = '该工序尚未接入';
@@ -318,6 +347,342 @@ class DramaRunner {
       status: failed == 0 ? DramaStatus.succeeded : DramaStatus.failed,
       error: failed == 0 ? null : '$failed 个角色生成失败',
     );
+  }
+
+  Future<({DramaEpisodeState state, DramaStatus status, String? error})>
+  _runFrame({
+    required DramaRun run,
+    required DramaSeries series,
+    required Storyboard board,
+    required Map<String, Object?> planJson,
+    required List<String> shotIds,
+    required DramaRunTarget target,
+    required bool force,
+    required bool degrade,
+    required DramaEpisodeState state,
+  }) async {
+    var currentState = state;
+    final plan = DramaPlanView(planJson);
+    final selected = shotIds.isEmpty
+        ? board.shots
+        : <Shot>[
+            for (final id in shotIds)
+              board.shots.firstWhere(
+                (shot) => shot.id == id,
+                orElse: () => throw ArgumentError.value(id, 'shot_id', 'unknown shot'),
+              ),
+          ];
+    final wantFrame =
+        target == DramaRunTarget.frame || target == DramaRunTarget.all;
+    final wantClip =
+        target == DramaRunTarget.clip || target == DramaRunTarget.all;
+    final width = series.frame.width;
+    final height = series.frame.height;
+    final frameModel = series.defaults.frameImageModel;
+    final clipModel = series.defaults.clipVideoModel;
+    final resolution = series.defaults.resolution;
+    const size = '1K';
+    var failed = 0;
+    String? error;
+
+    for (final shot in selected) {
+      if (run.cancelRequested) break;
+      final avatar = shot.speaker == null
+          ? null
+          : series.cast[shot.speaker]?.avatar;
+      final approved = avatar != null && avatar.approved;
+      final avatarHash = approved ? avatar.sourceHash : null;
+      final frameHash = dramaFrameHash(
+        shot: shot,
+        castAvatarHash: avatarHash,
+        model: frameModel,
+        size: size,
+      );
+      var shotState = currentState.shots[shot.id] ?? const DramaShotState();
+      final frameCached = _frameCached(
+        seriesId: run.seriesId,
+        episodeId: run.episodeId,
+        shotId: shot.id,
+        hash: frameHash,
+        state: currentState,
+      );
+      final needFrame = !frameCached || (force && wantFrame);
+
+      if (needFrame) {
+        try {
+          final refs = approved
+              ? <File>[store.seriesAssetFile(series.seriesId, avatar.path)]
+              : const <File>[];
+          final result = await gateway.generateImage(
+            model: frameModel,
+            mode: refs.isEmpty ? ImageMode.t2i : ImageMode.i2i,
+            prompt: _framePrompt(shot),
+            baseDir: '${store.episodeDir(run.seriesId, run.episodeId)}'
+                '/assets/frames/${shot.id}',
+            contentId: frameHash,
+            refFiles: refs,
+            size: size,
+            onLog: run.logs.add,
+          );
+          final fileName = File(result.path).uri.pathSegments.last;
+          final relative = 'assets/frames/${shot.id}/$frameHash/$fileName';
+          final frame = DramaArtifact(
+            status: DramaStatus.succeeded,
+            path: relative,
+            sourceHash: frameHash,
+            model: frameModel,
+            costYuan: result.costYuan,
+          );
+          shotState = _withFrame(shotState, frame);
+          currentState = currentState
+              .withShot(shot.id, shotState)
+              .withActualYuan(currentState.actualYuan + result.costYuan);
+          store.writeState(run.seriesId, run.episodeId, currentState);
+          run.items.add(
+            DramaRunItem(
+              id: shot.id,
+              kind: 'frame',
+              status: DramaStatus.succeeded,
+              path: relative,
+              costYuan: result.costYuan,
+            ),
+          );
+          run.logs.add('首帧 ${shot.id} 完成：$relative');
+        } on ConfigException catch (e) {
+          error = '未配置 DASHSCOPE_API_KEY：${e.message}';
+          run.logs.add(error);
+          failed += 1;
+          break;
+        } on Object catch (e) {
+          failed += 1;
+          shotState = _withFrame(
+            shotState,
+            DramaArtifact(status: DramaStatus.failed, error: '$e'),
+          );
+          currentState = currentState.withShot(shot.id, shotState);
+          store.writeState(run.seriesId, run.episodeId, currentState);
+          run.items.add(
+            DramaRunItem(
+              id: shot.id,
+              kind: 'frame',
+              status: DramaStatus.failed,
+              error: '$e',
+            ),
+          );
+          run.logs.add('首帧 ${shot.id} 失败：$e');
+          continue;
+        }
+      } else if (wantFrame) {
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: 'frame',
+            status: DramaStatus.skipped,
+            path: shotState.frame.path,
+          ),
+        );
+        run.logs.add('跳过首帧 ${shot.id}（缓存命中）');
+      }
+
+      if (!wantClip) continue;
+      final frame = shotState.frame;
+      if (frame.status != DramaStatus.succeeded || frame.path == null) {
+        continue;
+      }
+      final route = degrade ? ShotRoute.kenburns : plan.routeFor(shot.id);
+      final rawSeconds = plan.i2vSecondsFor(shot.id);
+      final i2vSeconds = route == ShotRoute.i2v
+          ? (rawSeconds < 2 ? 2 : rawSeconds)
+          : 0;
+      final clipHash = dramaClipHash(
+        shot: shot,
+        frameHash: frameHash,
+        route: route.name,
+        model: route == ShotRoute.i2v ? clipModel : 'ffmpeg',
+        resolution: resolution,
+        i2vSeconds: i2vSeconds,
+      );
+      if (!force &&
+          _clipCached(
+            seriesId: run.seriesId,
+            episodeId: run.episodeId,
+            shotId: shot.id,
+            hash: clipHash,
+            state: currentState,
+          )) {
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: route == ShotRoute.i2v ? 'clip' : 'local_clip',
+            status: DramaStatus.skipped,
+            path: shotState.clip.path,
+          ),
+        );
+        run.logs.add('跳过片段 ${shot.id}（缓存命中）');
+        continue;
+      }
+      try {
+        final relative = 'assets/clips/${shot.id}/$clipHash.mp4';
+        final outFile = store.assetFile(run.seriesId, run.episodeId, relative);
+        final frameFile = store.assetFile(
+          run.seriesId,
+          run.episodeId,
+          frame.path!,
+        );
+        DramaMediaResult result;
+        if (route == ShotRoute.i2v) {
+          final raw = File('${outFile.path}.raw.mp4');
+          result = await gateway.generateI2vClip(
+            model: clipModel,
+            resolution: resolution,
+            firstFrame: frameFile,
+            prompt: shot.motion ?? '',
+            durationS: i2vSeconds,
+            outFile: raw,
+            onLog: run.logs.add,
+          );
+          await gateway.normalizeClip(
+            input: raw,
+            outFile: outFile,
+            width: width,
+            height: height,
+          );
+          if (raw.existsSync()) raw.deleteSync();
+        } else {
+          final duration = plan.durationFor(shot.id).ceil();
+          await gateway.renderLocalClip(
+            image: frameFile,
+            outFile: outFile,
+            route: route,
+            width: width,
+            height: height,
+            durationS: duration,
+          );
+          result = DramaMediaResult(
+            path: outFile.path,
+            costYuan: 0,
+            model: 'ffmpeg',
+            durationS: duration.toDouble(),
+          );
+        }
+        final clip = DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: relative,
+          sourceHash: clipHash,
+          model: result.model,
+          costYuan: result.costYuan,
+          durationS: result.durationS,
+        );
+        shotState = _withClip(shotState, clip);
+        currentState = currentState
+            .withShot(shot.id, shotState)
+            .withActualYuan(currentState.actualYuan + result.costYuan);
+        store.writeState(run.seriesId, run.episodeId, currentState);
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: route == ShotRoute.i2v ? 'clip' : 'local_clip',
+            status: DramaStatus.succeeded,
+            path: relative,
+            costYuan: result.costYuan,
+          ),
+        );
+        run.logs.add('片段 ${shot.id} 完成：$relative');
+      } on ConfigException catch (e) {
+        error = '未配置 DASHSCOPE_API_KEY：${e.message}';
+        run.logs.add(error);
+        failed += 1;
+        break;
+      } on Object catch (e) {
+        failed += 1;
+        shotState = _withClip(
+          shotState,
+          DramaArtifact(status: DramaStatus.failed, error: '$e'),
+        );
+        currentState = currentState.withShot(shot.id, shotState);
+        store.writeState(run.seriesId, run.episodeId, currentState);
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: route == ShotRoute.i2v ? 'clip' : 'local_clip',
+            status: DramaStatus.failed,
+            error: '$e',
+          ),
+        );
+        run.logs.add('片段 ${shot.id} 失败：$e');
+      }
+    }
+
+    if (run.cancelRequested) {
+      return (state: currentState, status: DramaStatus.interrupted, error: null);
+    }
+    if (error != null) {
+      return (state: currentState, status: DramaStatus.failed, error: error);
+    }
+    return (
+      state: currentState,
+      status: failed == 0 ? DramaStatus.succeeded : DramaStatus.failed,
+      error: failed == 0 ? null : '$failed 个镜头生成失败',
+    );
+  }
+
+  DramaShotState _withFrame(DramaShotState current, DramaArtifact frame) =>
+      DramaShotState(
+        frame: frame,
+        clip: current.clip,
+        audio: current.audio,
+        review: current.review,
+      );
+
+  DramaShotState _withClip(DramaShotState current, DramaArtifact clip) =>
+      DramaShotState(
+        frame: current.frame,
+        clip: clip,
+        audio: current.audio,
+        review: current.review,
+      );
+
+  bool _frameCached({
+    required String seriesId,
+    required String episodeId,
+    required String shotId,
+    required String hash,
+    required DramaEpisodeState state,
+  }) {
+    final artifact = state.shots[shotId]?.frame;
+    if (artifact == null ||
+        artifact.status != DramaStatus.succeeded ||
+        artifact.sourceHash != hash ||
+        artifact.path == null) {
+      return false;
+    }
+    return store.assetFile(seriesId, episodeId, artifact.path!).existsSync();
+  }
+
+  bool _clipCached({
+    required String seriesId,
+    required String episodeId,
+    required String shotId,
+    required String hash,
+    required DramaEpisodeState state,
+  }) {
+    final artifact = state.shots[shotId]?.clip;
+    if (artifact == null ||
+        artifact.status != DramaStatus.succeeded ||
+        artifact.sourceHash != hash ||
+        artifact.path == null) {
+      return false;
+    }
+    return store.assetFile(seriesId, episodeId, artifact.path!).existsSync();
+  }
+
+  static String _framePrompt(Shot shot) {
+    final visual = (shot.visual ?? '').trim();
+    final base = visual.isEmpty ? shot.line.trim() : visual;
+    if (base.isEmpty) {
+      return '${shot.framing}，${shotKindToWire(shot.kind)}，竖屏电影感画面';
+    }
+    return '$base。竖屏电影感画面，${shot.framing}';
   }
 
   Set<String> _referencedSpeakers(Storyboard? board) {

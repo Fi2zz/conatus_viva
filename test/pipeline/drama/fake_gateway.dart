@@ -24,6 +24,9 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
   int imageCalls = 0;
   int clipCalls = 0;
   int localCalls = 0;
+  int? failImageCall;
+  int? failClipCall;
+  int? failLocalCall;
   final List<String> imagePrompts = <String>[];
   bool failAllImages = false;
   bool failAllClips = false;
@@ -43,6 +46,9 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
     imageCalls += 1;
     imagePrompts.add(prompt);
     if (missingKey) throw ConfigException('DASHSCOPE_API_KEY is not set');
+    if (failImageCall == imageCalls) {
+      throw PipelineError(ErrorClass.fatal, 'fake image failure');
+    }
     if (imageGate != null) await imageGate;
     if (failAllImages) {
       throw PipelineError(ErrorClass.fatal, 'fake image failure');
@@ -70,6 +76,9 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
   }) async {
     clipCalls += 1;
     if (missingKey) throw ConfigException('DASHSCOPE_API_KEY is not set');
+    if (failClipCall == clipCalls) {
+      throw PipelineError(ErrorClass.fatal, 'fake clip failure');
+    }
     if (failAllClips) {
       throw PipelineError(ErrorClass.fatal, 'fake clip failure');
     }
@@ -93,6 +102,9 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
     required int durationS,
   }) async {
     localCalls += 1;
+    if (failLocalCall == localCalls) {
+      throw PipelineError(ErrorClass.fatal, 'fake local failure');
+    }
     outFile.parent.createSync(recursive: true);
     outFile.writeAsBytesSync(<int>[7, 8, 9]);
   }
