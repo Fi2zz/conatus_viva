@@ -206,6 +206,22 @@ class DramaStore {
     return File(resolved);
   }
 
+  /// 解析剧目录下的相对资源路径（定妆图）；拒绝绝对路径、`..` 与逃逸。
+  File seriesAssetFile(String seriesId, String relativePath) {
+    if (relativePath.isEmpty ||
+        relativePath.startsWith('/') ||
+        relativePath.startsWith('\\') ||
+        relativePath.contains('\\')) {
+      throw ArgumentError.value(relativePath, 'relativePath', 'unsafe path');
+    }
+    final root = Directory(seriesDir(seriesId)).absolute.path;
+    final resolved = Uri.file('$root/$relativePath').normalizePath().toFilePath();
+    if (resolved != root && !resolved.startsWith('$root/')) {
+      throw ArgumentError.value(relativePath, 'relativePath', 'path escape');
+    }
+    return File(resolved);
+  }
+
   Map<String, Object?> _readJson(String path) {
     final decoded = jsonDecode(File(path).readAsStringSync());
     return asJsonMap(decoded, path);

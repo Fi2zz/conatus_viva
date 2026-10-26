@@ -304,6 +304,59 @@ class DramaEpisodeState {
     );
   }
 
+  DramaEpisodeState withShot(String shotId, DramaShotState shotState) =>
+      DramaEpisodeState(
+        seriesId: seriesId,
+        episodeId: episodeId,
+        storyboardHash: storyboardHash,
+        planHash: planHash,
+        steps: steps,
+        shots: <String, DramaShotState>{...shots, shotId: shotState},
+        activeRunId: activeRunId,
+        actualYuan: actualYuan,
+        estimatedRemainingYuan: estimatedRemainingYuan,
+        warnings: warnings,
+      );
+
+  DramaEpisodeState withActualYuan(double actual) => DramaEpisodeState(
+    seriesId: seriesId,
+    episodeId: episodeId,
+    storyboardHash: storyboardHash,
+    planHash: planHash,
+    steps: steps,
+    shots: shots,
+    activeRunId: activeRunId,
+    actualYuan: actual,
+    estimatedRemainingYuan: estimatedRemainingYuan,
+    warnings: warnings,
+  );
+
+  DramaEpisodeState withActiveRun(String? runId) => DramaEpisodeState(
+    seriesId: seriesId,
+    episodeId: episodeId,
+    storyboardHash: storyboardHash,
+    planHash: planHash,
+    steps: steps,
+    shots: shots,
+    activeRunId: runId,
+    actualYuan: actualYuan,
+    estimatedRemainingYuan: estimatedRemainingYuan,
+    warnings: warnings,
+  );
+
+  DramaEpisodeState withWarnings(List<String> next) => DramaEpisodeState(
+    seriesId: seriesId,
+    episodeId: episodeId,
+    storyboardHash: storyboardHash,
+    planHash: planHash,
+    steps: steps,
+    shots: shots,
+    activeRunId: activeRunId,
+    actualYuan: actualYuan,
+    estimatedRemainingYuan: estimatedRemainingYuan,
+    warnings: List<String>.unmodifiable(next),
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'series_id': seriesId,
     'episode_id': episodeId,

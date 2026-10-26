@@ -376,6 +376,11 @@ class DramaSeries {
     for (final entry in cast.entries) entry.key: entry.value.toStoryboardCast(),
   };
 
+  /// 替换/新增一个角色，其余字段保持不变。
+  DramaSeries withCastMember(DramaCastMember member) => copyWith(
+    cast: <String, DramaCastMember>{...cast, member.castId: member},
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'series_id': seriesId,
     'title': title,

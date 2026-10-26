@@ -110,6 +110,21 @@ void main() {
     );
   });
 
+  test('series asset path cannot escape the series dir', () {
+    expect(
+      () => store.seriesAssetFile('jietiao', '../secret.png'),
+      throwsArgumentError,
+    );
+    expect(
+      () => store.seriesAssetFile('jietiao', '/etc/passwd'),
+      throwsArgumentError,
+    );
+    expect(
+      store.seriesAssetFile('jietiao', 'cast/erniu/hash/image-01.png'),
+      isA<File>(),
+    );
+  });
+
   test('corrupt series is skipped by listSeries', () {
     Directory('${store.rootDir}/series/bad').createSync(recursive: true);
     File('${store.rootDir}/series/bad/series.json').writeAsStringSync('{');

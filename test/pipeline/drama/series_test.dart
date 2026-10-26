@@ -143,4 +143,12 @@ void main() {
     final again = DramaSeries.fromJson(json);
     expect(again.cast['erniu']!.description, '五十岁，旧夹克');
   });
+
+  test('withCastMember replaces one cast entry and keeps the rest', () {
+    final series = DramaSeries.fromJson(fullSeriesJson());
+    final member = series.cast['erniu']!.copyWith(description: '换了衣服');
+    final next = series.withCastMember(member);
+    expect(next.cast['erniu']!.description, '换了衣服');
+    expect(next.cast.length, series.cast.length);
+  });
 }
