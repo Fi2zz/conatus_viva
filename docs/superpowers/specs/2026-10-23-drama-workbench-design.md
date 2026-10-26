@@ -738,3 +738,16 @@ App
 - [ ] `make analyze` 零告警；`make test-dart` 全绿。
 - [ ] `npm test && npm run lint && npm run build` 通过；`make web` 已提交。
 - [ ] 不新增依赖；不提交 `pipeline_out/`、`.env`、密钥。
+
+## 13. 2026-10-26 修订（P2 / 设置入口）
+
+本节覆盖前文与之冲突的表述：
+
+- **密钥入口**：桌面端密钥只来自设置页写入的 macOS Keychain；无原生通道的平台回退到用户目录 0600 文件。**不再读取 `.env`**，进程环境仅 CLI/CI 显式注入。`.env.example` 删除，`make setup` 只创建 `pipeline_config.json`。
+- **设置 API**：`GET /api/settings` 只返回配置状态；`PUT /api/settings` 省略字段=不变、空串=清除；保存后更新运行中的 config，不回显密钥。
+- **estimate 请求**：只接受 `{step, cast_ids?, shot_ids?, target?, force?}`，`step ∈ story|storyboard|cast|frame`；旧的 `targets` 格式删除。
+- **P2 产物路径**：`cast/<cast_id>/<hash>/image-01.png`、`assets/frames/<shot_id>/<hash>/image-01.png`、`assets/clips/<shot_id>/<hash>.mp4`；hash 不一致即 `stale`。
+- **定妆采用**：生成后 `approved=false`；用户点「采用」写回 `series`，`cast` 工序才完成。
+- **P2 路由范围**：画面只消费计划单已有的 `i2v` / `kenburns` / `micro`；t2v 不新增自动路由，仍保留在通用工具。
+- **预算**：总预算与 i2v 预算不足时，run 在任何付费调用前返回 409 `budget_exceeded`。
+- **验收**：先完成 P1 验收记录；P2 离线全绿后做一次小额真实跑（约 ¥1.15），需用户确认，不把密钥写入仓库或日志。
