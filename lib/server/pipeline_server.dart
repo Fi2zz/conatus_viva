@@ -241,6 +241,9 @@ class PipelineServer {
           runner: DramaRunner(
             store: store,
             gateway: DashScopeDramaMediaGateway(cfg: cfg, pricing: pricing),
+            ttsModel: cfg.ttsModel,
+            ttsFallbackModel: cfg.ttsFallbackModel,
+            ttsFallbackVoice: cfg.ttsFallbackVoice,
           ),
         );
   }

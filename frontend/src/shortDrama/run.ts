@@ -36,7 +36,7 @@ export interface UseDramaRun {
   busy: boolean;
   error: string;
   startStep: (
-    step: "cast" | "frame",
+    step: "cast" | "frame" | "voice",
     input?: Omit<EstimateInput, "step">,
   ) => Promise<void>;
   startShot: (
@@ -103,7 +103,7 @@ export function useDramaRun(
   );
 
   const startStep = useCallback(
-    (step: "cast" | "frame", input: Omit<EstimateInput, "step"> = {}) =>
+    (step: "cast" | "frame" | "voice", input: Omit<EstimateInput, "step"> = {}) =>
       begin(() => dramaApi.runStep(seriesId, episodeId, step, input)),
     [begin, seriesId, episodeId],
   );

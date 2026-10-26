@@ -52,3 +52,18 @@ String dramaClipHash({
   'resolution': resolution,
   'i2v_seconds': i2vSeconds,
 });
+
+String dramaVoiceHash({
+  required Shot shot,
+  required String model,
+  required String? voiceId,
+  required String instruction,
+}) => dramaHash(<String, Object?>{
+  'kind': 'voice',
+  'shot': shot.id,
+  'text': shot.line,
+  'speaker': shot.speaker,
+  'model': model,
+  'voice_id': voiceId,
+  'instruction': instruction,
+});

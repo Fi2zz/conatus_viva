@@ -32,7 +32,7 @@ Storyboard board() => Storyboard.fromJson(<String, Object?>{
       'id': 's01',
       'kind': 'action',
       'speaker': 'erniu',
-      'line': '',
+      'line': '还钱。',
       'duration_s': 3,
       'priority': 'hook',
       'visual': '借条特写',
@@ -245,6 +245,24 @@ void main() {
     expect(plan.totals.estimatedYuan, 0.45);
   });
 
+  test('voice estimate marks each line as unpriced TTS', () {
+    final estimate = estimateDrama(
+      series: series(),
+      episode: episode(),
+      state: DramaEpisodeState.empty('jietiao', 'ep07'),
+      storyboard: board(),
+      planJson: planJson(),
+      request: const DramaEstimateRequest(step: DramaEstimateStep.voice),
+      pricing: pricing(),
+      store: store,
+    );
+    expect(estimate.items, isEmpty);
+    expect(estimate.unpriced.single.kind, 'tts');
+    expect(estimate.unpriced.single.id, 's01');
+    expect(estimate.unpriced.single.reason, 'tts_pricing_unavailable');
+    expect(estimate.totalEstimatedYuan, 0);
+  });
+
   test('degrade prices the clip as a zero-cost local render', () {
     final s = series();
     final estimate = estimateDrama(
@@ -272,7 +290,7 @@ void main() {
 
   test('new estimate request rejects unknown steps and bad target', () {
     expect(
-      () => parseDramaEstimateRequest(<String, Object?>{'step': 'voice'}),
+      () => parseDramaEstimateRequest(<String, Object?>{'step': 'unknown'}),
       throwsArgumentError,
     );
     expect(

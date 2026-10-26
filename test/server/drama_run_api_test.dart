@@ -66,7 +66,7 @@ Storyboard _board() => Storyboard.fromJson(<String, Object?>{
       'id': 's01',
       'kind': 'action',
       'speaker': 'erniu',
-      'line': '',
+      'line': '还钱。',
       'duration_s': 3,
       'priority': 'hook',
       'visual': '借条特写',
@@ -240,14 +240,47 @@ void main() {
     expect((body['budget'] as Map<String, dynamic>)['i2v_total_yuan'], 20);
   });
 
-  test('voice run is 501 and unknown run is 404', () async {
+  test('voice run and audio reconcile work end to end', () async {
     final voice = await _send(
       port,
       'POST',
       '/api/drama/series/jietiao/episodes/ep07/steps/voice:run',
       <String, Object?>{},
     );
-    expect(voice.status, 501);
+    expect(voice.status, 202);
+    final runId = (jsonDecode(voice.body) as Map<String, dynamic>)['run_id'];
+    final run = await _pollRun(port, runId as String);
+    expect(run['status'], 'completed');
+
+    final preview = await _send(
+      port,
+      'POST',
+      '/api/drama/series/jietiao/episodes/ep07/audio:reconcile',
+      <String, Object?>{'apply': false},
+    );
+    expect(preview.status, 200);
+    final previewBody = jsonDecode(preview.body) as Map<String, dynamic>;
+    expect(previewBody['applied'], isFalse);
+    final changes = previewBody['changes'] as List<Object?>;
+    expect(changes, isNotEmpty);
+    expect((changes.first as Map<String, dynamic>)['shot_id'], 's01');
+
+    final applied = await _send(
+      port,
+      'POST',
+      '/api/drama/series/jietiao/episodes/ep07/audio:reconcile',
+      <String, Object?>{'apply': true},
+    );
+    expect(applied.status, 200);
+    final appliedBody = jsonDecode(applied.body) as Map<String, dynamic>;
+    expect(appliedBody['applied'], isTrue);
+    final bundle = appliedBody['bundle'] as Map<String, dynamic>;
+    final shots = (bundle['storyboard'] as Map<String, dynamic>)['shots']
+        as List<Object?>;
+    final s01 = shots.firstWhere(
+      (item) => (item as Map<String, dynamic>)['id'] == 's01',
+    ) as Map<String, dynamic>;
+    expect(s01['duration_s'], 2.5);
     final missing = await _send(
       port,
       'GET',

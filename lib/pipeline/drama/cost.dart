@@ -162,7 +162,7 @@ class DramaEstimate {
 }
 
 /// 估算步骤；`story` / `storyboard` 只产生 LLM 未估价项。
-enum DramaEstimateStep { story, storyboard, cast, frame }
+enum DramaEstimateStep { story, storyboard, cast, frame, voice }
 
 /// 一次估算请求；旧的 `targets` 格式已删除。
 class DramaEstimateRequest {
@@ -253,6 +253,21 @@ DramaEstimate estimateDrama({
         reason: 'llm_pricing_unavailable',
       ),
     );
+  } else if (request.step == DramaEstimateStep.voice) {
+    final wanted = request.shotIds.isEmpty
+        ? null
+        : request.shotIds.toSet();
+    for (final shot in storyboard?.shots ?? const <Shot>[]) {
+      if (shot.line.trim().isEmpty) continue;
+      if (wanted != null && !wanted.contains(shot.id)) continue;
+      unpriced.add(
+        DramaUnpricedItem(
+          kind: 'tts',
+          id: shot.id,
+          reason: 'tts_pricing_unavailable',
+        ),
+      );
+    }
   } else if (request.step == DramaEstimateStep.cast) {
     _estimateCast(
       series: series,

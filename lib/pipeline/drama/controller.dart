@@ -18,6 +18,7 @@ import 'hash.dart';
 import 'ids.dart';
 import 'json.dart';
 import 'llm.dart';
+import 'plan_view.dart';
 import 'pricing.dart';
 import 'runner.dart';
 import 'run_target.dart';
@@ -45,6 +46,7 @@ enum DramaRoute {
   runShot,
   runStatus,
   cancelRun,
+  reconcileAudio,
   asset,
   seriesAsset,
 }
@@ -99,6 +101,9 @@ DramaRoute? parseDramaRoute(String method, List<String> segments) {
     if (method == 'POST' && action == 'storyboard:draft') {
       return DramaRoute.draftStoryboard;
     }
+    if (method == 'POST' && action == 'audio:reconcile') {
+      return DramaRoute.reconcileAudio;
+    }
     return null;
   }
   if (segments.length == 8 && segments[4] == 'episodes') {
@@ -144,7 +149,7 @@ class DramaController {
   Map<String, bool> get _capabilities => <String, bool>{
     'cast': runner != null,
     'frame': runner != null,
-    'voice': false,
+    'voice': runner != null,
     'edit': false,
     'pack': false,
   };
@@ -202,6 +207,8 @@ class DramaController {
           await _draftStoryboard(req, seriesId!, episodeId!);
         case DramaRoute.runStep:
           await _runStep(req, seriesId!, episodeId!, segments[7]);
+        case DramaRoute.reconcileAudio:
+          await _reconcileAudio(req, seriesId!, episodeId!);
         case DramaRoute.runShot:
           await _runShot(req, seriesId!, episodeId!, segments[7]);
         case DramaRoute.runStatus:
@@ -497,7 +504,9 @@ class DramaController {
     }
     final key = action.split(':').first;
     final step = dramaStepFromKey(key);
-    if (step != DramaStep.cast && step != DramaStep.frame) {
+    if (step != DramaStep.cast &&
+        step != DramaStep.frame &&
+        step != DramaStep.voice) {
       await _error(req, HttpStatus.notImplemented, '该工序尚未接入', 'not_wired');
       return;
     }
@@ -506,7 +515,7 @@ class DramaController {
     try {
       request = parseDramaEstimateRequest(<String, Object?>{
         ...body,
-        'step': step == DramaStep.cast ? 'cast' : 'frame',
+        'step': step!.name,
       });
     } on ArgumentError catch (e) {
       await _error(req, HttpStatus.badRequest, '${e.message}', 'invalid_body');
@@ -548,7 +557,7 @@ class DramaController {
       final run = await runner!.startStep(
         seriesId: seriesId,
         episodeId: episodeId,
-        step: step!,
+        step: step,
         castIds: request.castIds,
         shotIds: request.shotIds,
         target: request.target,
@@ -563,6 +572,91 @@ class DramaController {
       await _error(req, HttpStatus.badRequest, '${e.message}', 'invalid_body');
     }
   }
+
+  Future<void> _reconcileAudio(
+    HttpRequest req,
+    String seriesId,
+    String episodeId,
+  ) async {
+    final body = await _bodyOrError(req) ?? <String, Object?>{};
+    final apply = body['apply'] == true;
+    final board = store.readStoryboard(seriesId, episodeId);
+    if (board == null) {
+      await _error(req, HttpStatus.conflict, 'storyboard 不存在', 'storyboard_required');
+      return;
+    }
+    final state = store.readState(seriesId, episodeId);
+    final planJson = store.readPlanJson(seriesId, episodeId);
+    final plan = planJson == null ? null : DramaPlanView(planJson);
+    final changes = <Map<String, Object?>>[];
+    final nextShots = <Shot>[];
+    for (final shot in board.shots) {
+      final measured = state.shots[shot.id]?.audio.durationS;
+      if (measured == null || shot.line.trim().isEmpty) {
+        nextShots.add(shot);
+        continue;
+      }
+      final from = plan?.durationFor(shot.id) ?? shot.durationS ?? measured;
+      final to = (measured * 10).round() / 10;
+      if ((to - from).abs() >= 0.1) {
+        changes.add(<String, Object?>{
+          'shot_id': shot.id,
+          'from_s': from,
+          'to_s': to,
+        });
+        nextShots.add(_shotWithDuration(shot, to));
+      } else {
+        nextShots.add(shot);
+      }
+    }
+    if (!apply) {
+      await _sendJson(req, HttpStatus.ok, <String, Object?>{
+        'changes': changes,
+        'applied': false,
+      });
+      return;
+    }
+    if (changes.isNotEmpty) {
+      final next = Storyboard(
+        contentId: board.contentId,
+        title: board.title,
+        dialect: board.dialect,
+        frame: board.frame,
+        budgetYuan: board.budgetYuan,
+        cast: board.cast,
+        shots: nextShots,
+        warnings: board.warnings,
+      );
+      store.writeStoryboard(seriesId, episodeId, next);
+      _writePlan(
+        seriesId,
+        episodeId,
+        store.readEpisode(seriesId, episodeId),
+        next,
+      );
+    }
+    await _sendJson(req, HttpStatus.ok, <String, Object?>{
+      'changes': changes,
+      'applied': true,
+      'bundle': await _bundle(
+        store.readSeries(seriesId),
+        store.readEpisode(seriesId, episodeId),
+      ),
+    });
+  }
+
+  static Shot _shotWithDuration(Shot shot, double durationS) => Shot(
+    id: shot.id,
+    kind: shot.kind,
+    framing: shot.framing,
+    speaker: shot.speaker,
+    line: shot.line,
+    durationS: durationS,
+    priority: shot.priority,
+    prop: shot.prop,
+    motion: shot.motion,
+    visual: shot.visual,
+  );
 
   Future<void> _runShot(
     HttpRequest req,

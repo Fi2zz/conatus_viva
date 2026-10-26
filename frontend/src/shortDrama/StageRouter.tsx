@@ -67,7 +67,13 @@ export default function StageRouter(props: StageRouterProps) {
         />
       );
     case "voice":
-      return <VoiceStage bundle={bundle} />;
+      return (
+        <VoiceStage
+          bundle={bundle}
+          onBundle={onBundle}
+          onReload={onReload}
+        />
+      );
     case "edit":
       return <EditStage />;
     case "pack":

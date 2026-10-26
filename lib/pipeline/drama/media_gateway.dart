@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../bailian/i2v.dart';
 import '../bailian/image_client.dart';
+import '../bailian/tts.dart';
 import '../bailian/wan30_video.dart';
 import '../bailian/uploader.dart';
 import '../config.dart';
@@ -61,6 +62,16 @@ abstract interface class DramaMediaGateway {
     required String resolution,
     required String prompt,
     required int durationS,
+    required File outFile,
+    required void Function(String) onLog,
+  });
+
+  Future<DramaMediaResult> synthesizeVoice({
+    required String model,
+    required String text,
+    required String? voiceId,
+    required String? fallbackVoice,
+    required String instruction,
     required File outFile,
     required void Function(String) onLog,
   });
@@ -271,6 +282,44 @@ class DashScopeDramaMediaGateway implements DramaMediaGateway {
       costYuan: durationS * pricing.videoPrice(model, resolution),
       model: model,
       durationS: durationS.toDouble(),
+    );
+  }
+
+  @override
+  Future<DramaMediaResult> synthesizeVoice({
+    required String model,
+    required String text,
+    required String? voiceId,
+    required String? fallbackVoice,
+    required String instruction,
+    required File outFile,
+    required void Function(String) onLog,
+  }) async {
+    final tts = TtsClient(
+      apiKey: cfg.requireApiKey(),
+      client: client,
+      host: cfg.apiHost,
+    );
+    final audio = await tts.synth(
+      text: text,
+      model: model,
+      voiceId: voiceId,
+      fallbackVoice: fallbackVoice,
+      instruction: instruction,
+    );
+    outFile.parent.createSync(recursive: true);
+    audio.wav.copySync(outFile.path);
+    try {
+      audio.wav.parent.deleteSync(recursive: true);
+    } catch (_) {
+      // Best-effort temp cleanup; the final audio is already persisted.
+    }
+    onLog('配音已生成：${outFile.path}');
+    return DramaMediaResult(
+      path: outFile.path,
+      costYuan: 0,
+      model: model,
+      durationS: audio.seconds,
     );
   }
 

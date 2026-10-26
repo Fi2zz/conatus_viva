@@ -33,7 +33,7 @@ Storyboard board() => Storyboard.fromJson(<String, Object?>{
       'id': 's01',
       'kind': 'action',
       'speaker': 'erniu',
-      'line': '',
+      'line': '还钱。',
       'duration_s': 3,
       'priority': 'hook',
       'visual': '借条特写',
@@ -325,6 +325,33 @@ void main() {
     await run.done;
     expect(gateway.clipCalls, 0);
     expect(gateway.localCalls, 1);
+  });
+
+  test('voice run stores audio and skips on second run', () async {
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.voice,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.completed);
+    final state = store.readState('jietiao', 'ep07');
+    final audio = state.shots['s01']!.audio;
+    expect(audio.status, DramaStatus.succeeded);
+    expect(audio.durationS, 2.5);
+    expect(
+      store.assetFile('jietiao', 'ep07', audio.path!).existsSync(),
+      isTrue,
+    );
+    expect(gateway.voiceCalls, 1);
+    await (await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.voice,
+    )).done;
+    expect(gateway.voiceCalls, 1);
   });
 
   test('t2v plan skips the frame and calls t2v', () async {

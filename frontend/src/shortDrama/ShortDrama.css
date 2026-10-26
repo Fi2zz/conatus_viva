@@ -1807,3 +1807,10 @@
   border: 1px solid var(--line);
   max-height: 320px;
 }
+
+.sd-audio-player {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  max-width: 360px;
+}

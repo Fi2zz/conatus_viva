@@ -42,6 +42,7 @@ const Set<DramaStep> kDramaWiredSteps = <DramaStep>{
   DramaStep.cast,
   DramaStep.board,
   DramaStep.frame,
+  DramaStep.voice,
 };
 
 /// `DramaStep` → wire key。

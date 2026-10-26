@@ -1,5 +1,6 @@
 /// `/api/drama/*` 客户端；前端只经本地 HTTP 访问后端。
 import type {
+  AudioReconcileChange,
   DramaEpisode,
   DramaEstimate,
   DramaRun,
@@ -162,7 +163,7 @@ export const dramaApi = {
   runStep(
     seriesId: string,
     episodeId: string,
-    step: "cast" | "frame",
+    step: "cast" | "frame" | "voice",
     input: Omit<EstimateInput, "step"> = {},
   ): Promise<{ run_id: string }> {
     return request(
@@ -197,6 +198,21 @@ export const dramaApi = {
     return request(
       `${base(seriesId, episodeId)}/runs/${encodeURIComponent(runId)}:cancel`,
       json("POST", {}),
+    );
+  },
+
+  reconcileAudio(
+    seriesId: string,
+    episodeId: string,
+    apply: boolean,
+  ): Promise<{
+    changes: AudioReconcileChange[];
+    applied: boolean;
+    bundle?: EpisodeBundle;
+  }> {
+    return request(
+      `${base(seriesId, episodeId)}/audio:reconcile`,
+      json("POST", { apply }),
     );
   },
 

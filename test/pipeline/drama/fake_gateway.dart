@@ -25,6 +25,7 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
   int clipCalls = 0;
   int t2vCalls = 0;
   int localCalls = 0;
+  int voiceCalls = 0;
   int? failImageCall;
   int? failClipCall;
   int? failLocalCall;
@@ -114,6 +115,28 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
       costYuan: clipCost,
       model: model,
       durationS: durationS.toDouble(),
+    );
+  }
+
+  @override
+  Future<DramaMediaResult> synthesizeVoice({
+    required String model,
+    required String text,
+    required String? voiceId,
+    required String? fallbackVoice,
+    required String instruction,
+    required File outFile,
+    required void Function(String) onLog,
+  }) async {
+    voiceCalls += 1;
+    if (missingKey) throw ConfigException('DASHSCOPE_API_KEY is not set');
+    outFile.parent.createSync(recursive: true);
+    outFile.writeAsBytesSync(<int>[1, 2, 3]);
+    return DramaMediaResult(
+      path: outFile.path,
+      costYuan: 0,
+      model: model,
+      durationS: 2.5,
     );
   }
 

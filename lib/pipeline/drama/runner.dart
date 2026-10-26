@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../config.dart';
+import '../dialect_map.dart';
 import '../generation_models.dart';
 import '../render_plan.dart';
 import '../storyboard.dart';
@@ -26,11 +27,17 @@ class DramaRunner {
   DramaRunner({
     required this.store,
     required this.gateway,
+    this.ttsModel = 'qwen-audio-3.1-tts-flash',
+    this.ttsFallbackModel = 'qwen3-tts-flash',
+    this.ttsFallbackVoice = 'Cherry',
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
   final DramaStore store;
   final DramaMediaGateway gateway;
+  final String ttsModel;
+  final String ttsFallbackModel;
+  final String? ttsFallbackVoice;
   final DateTime Function() _now;
   final DramaRunRegistry _runs = DramaRunRegistry();
   int _seq = 0;
@@ -53,7 +60,9 @@ class DramaRunner {
     DramaRunTarget target = DramaRunTarget.all,
     bool force = false,
   }) async {
-    if (step != DramaStep.cast && step != DramaStep.frame) {
+    if (step != DramaStep.cast &&
+        step != DramaStep.frame &&
+        step != DramaStep.voice) {
       throw ArgumentError.value(step.name, 'step', 'step is not wired');
     }
     final active = _runs.activeFor(seriesId, episodeId);
@@ -188,6 +197,19 @@ class DramaRunner {
             series: series,
             board: board,
             castIds: castIds,
+            force: force,
+            state: state,
+          );
+          state = result.state;
+          status = result.status;
+          error = result.error;
+        case DramaStep.voice:
+          final result = await _runVoice(
+            run: run,
+            series: series,
+            episode: episode,
+            board: board,
+            shotIds: shotIds,
             force: force,
             state: state,
           );
@@ -348,6 +370,145 @@ class DramaRunner {
       state: currentState,
       status: failed == 0 ? DramaStatus.succeeded : DramaStatus.failed,
       error: failed == 0 ? null : '$failed 个角色生成失败',
+    );
+  }
+
+  Future<({DramaEpisodeState state, DramaStatus status, String? error})>
+  _runVoice({
+    required DramaRun run,
+    required DramaSeries series,
+    required DramaEpisode episode,
+    required Storyboard? board,
+    required List<String> shotIds,
+    required bool force,
+    required DramaEpisodeState state,
+  }) async {
+    var currentState = state;
+    final selected = board?.shots ?? const <Shot>[];
+    final wanted = shotIds.isEmpty ? null : shotIds.toSet();
+    final lines = <Shot>[
+      for (final shot in selected)
+        if (shot.line.trim().isNotEmpty &&
+            (wanted == null || wanted.contains(shot.id)))
+          shot,
+    ];
+    if (lines.isEmpty) {
+      return (
+        state: currentState,
+        status: DramaStatus.skipped,
+        error: null,
+      );
+    }
+    final spec = resolveDialect(episode.settings.dialect);
+    var failed = 0;
+    String? error;
+
+    for (final shot in lines) {
+      if (run.cancelRequested) break;
+      final member = shot.speaker == null ? null : series.cast[shot.speaker];
+      final voiceId = member?.voiceId;
+      final model = voiceId == null ? ttsFallbackModel : ttsModel;
+      final hash = dramaVoiceHash(
+        shot: shot,
+        model: model,
+        voiceId: voiceId,
+        instruction: spec.instruction,
+      );
+      var shotState = currentState.shots[shot.id] ?? const DramaShotState();
+      final audio = shotState.audio;
+      if (!force &&
+          audio.status == DramaStatus.succeeded &&
+          audio.sourceHash == hash &&
+          audio.path != null &&
+          store
+              .assetFile(run.seriesId, run.episodeId, audio.path!)
+              .existsSync()) {
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: 'voice',
+            status: DramaStatus.skipped,
+            path: audio.path,
+          ),
+        );
+        run.logs.add('跳过配音 ${shot.id}（缓存命中）');
+        continue;
+      }
+      try {
+        final relative = 'assets/audio/${shot.id}/$hash.wav';
+        final outFile = store.assetFile(run.seriesId, run.episodeId, relative);
+        final result = await gateway.synthesizeVoice(
+          model: model,
+          text: shot.line,
+          voiceId: voiceId,
+          fallbackVoice: voiceId == null ? ttsFallbackVoice : null,
+          instruction: spec.instruction,
+          outFile: outFile,
+          onLog: run.logs.add,
+        );
+        final artifact = DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: relative,
+          sourceHash: hash,
+          model: model,
+          durationS: result.durationS,
+        );
+        shotState = DramaShotState(
+          frame: shotState.frame,
+          clip: shotState.clip,
+          audio: artifact,
+          review: shotState.review,
+        );
+        currentState = currentState.withShot(shot.id, shotState);
+        store.writeState(run.seriesId, run.episodeId, currentState);
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: 'voice',
+            status: DramaStatus.succeeded,
+            path: relative,
+          ),
+        );
+        run.logs.add(
+          '配音 ${shot.id} 完成：${result.durationS?.toStringAsFixed(2) ?? '?'}s',
+        );
+      } on ConfigException catch (e) {
+        error = '未配置 DASHSCOPE_API_KEY：${e.message}';
+        run.logs.add(error);
+        failed += 1;
+        break;
+      } on Object catch (e) {
+        failed += 1;
+        shotState = DramaShotState(
+          frame: shotState.frame,
+          clip: shotState.clip,
+          audio: DramaArtifact(status: DramaStatus.failed, error: '$e'),
+          review: shotState.review,
+        );
+        currentState = currentState.withShot(shot.id, shotState);
+        store.writeState(run.seriesId, run.episodeId, currentState);
+        run.items.add(
+          DramaRunItem(
+            id: shot.id,
+            kind: 'voice',
+            status: DramaStatus.failed,
+            error: '$e',
+          ),
+        );
+        run.logs.add('配音 ${shot.id} 失败：$e');
+      }
+    }
+
+    if (run.cancelRequested) {
+      return (state: currentState, status: DramaStatus.interrupted, error: null);
+    }
+    if (error != null) {
+      return (state: currentState, status: DramaStatus.failed, error: error);
+    }
+    return (
+      state: currentState,
+      status: failed == 0 ? DramaStatus.succeeded : DramaStatus.failed,
+      error: failed == 0 ? null : '$failed 句配音失败',
     );
   }
 
