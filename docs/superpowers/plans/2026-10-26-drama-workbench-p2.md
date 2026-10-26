@@ -48,7 +48,7 @@
 - Consumes: 上周已提交的 P1 实现。
 - Produces: 一份带命令输出的验收记录；两份文档的 checkbox 全部勾选。
 
-- [ ] **Step 1: 跑基线命令并记录**
+- [x] **Step 1: 跑基线命令并记录**
 
 Run:
 
@@ -61,7 +61,7 @@ cd frontend && npm run build
 
 Expected: 全部退出码 0；把每条命令的结果摘要（通过/失败、测试数量）写进 `2026-10-26-p1-acceptance.md`，不要粘贴密钥或完整环境。
 
-- [ ] **Step 2: 验证 `web_build` 与源码一致**
+- [x] **Step 2: 验证 `web_build` 与源码一致**
 
 Run:
 
@@ -72,11 +72,11 @@ git status --short web_build
 
 Expected: `web_build` 无改动；若有改动，说明是构建环境差异，并把生成物一并提交。
 
-- [ ] **Step 3: 逐项核对 P1 验收清单**
+- [x] **Step 3: 逐项核对 P1 验收清单**
 
 对照 `2026-10-23-drama-workbench-p1.md` 的 9 条验收清单，在验收记录里逐条写「证据（测试名 / 文件 / 手工检查）」；空态、未接入诊断、`run` 501、费用闸门以现有测试和代码路径为证据。发现红项时停止，不勾选，先报告。
 
-- [ ] **Step 4: 勾选并提交**
+- [x] **Step 4: 勾选并提交**
 
 把 P1 计划与设计文档里已完成项改成 `- [x]`，提交：
 
@@ -110,7 +110,7 @@ git commit -m "docs(short-drama): P1 验收记录与清单勾选"
   - `void updateSecrets(Map<String, String?> values)`（null 或空串 = 清除）
 - Consumes: 现有 `requireApiKey()`、OSS getter。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `test/pipeline/config_test.dart` 新增：
 
@@ -137,12 +137,12 @@ test('empty secret clears the override', () async {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/config_test.dart`
 Expected: FAIL，`updateSecrets` / `hasApiKey` 不存在。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - 构造函数去掉 `const`，`_env = Map<String, String>.of(env ?? const {})`。
 - 把 `workspaceId` / `baseUrl` 改成 getter：保存 `_configuredWorkspaceId` / `_configuredBaseUrl`；`effectiveWorkspaceId` 先读 `_env['DASHSCOPE_WORKSPACE_ID']`。
@@ -150,12 +150,12 @@ Expected: FAIL，`updateSecrets` / `hasApiKey` 不存在。
 - 新增 `hasApiKey`、`hasOss`、`updateSecrets`。
 - 删除所有测试文件里 `const PipelineConfig(` 的 `const`。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/config_test.dart test/pipeline/host_smoke_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/config.dart test/pipeline/config_test.dart test/pipeline/host_smoke_test.dart \
@@ -183,7 +183,7 @@ git commit -m "feat(config): 支持运行时密钥覆盖与动态工作空间主
   - `ApiRoute.settings`
 - Consumes: Task 2 的 `cfg.updateSecrets` / `hasApiKey` / `hasOss`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test/server/settings_api_test.dart` 覆盖：
 
@@ -216,12 +216,12 @@ test('empty value clears and malformed body is 400', () async {
 
 `test/server/api_router_test.dart` 增加：`GET/PUT /api/settings` → `ApiRoute.settings`。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/server/settings_api_test.dart test/server/api_router_test.dart`
 Expected: FAIL，路由/类型不存在。
 
-- [ ] **Step 3: 实现存储与 API**
+- [x] **Step 3: 实现存储与 API**
 
 - `FileSecretStore` 用原子写（`.tmp` + rename），文件不存在返回空 map；父目录自动创建；测试可传临时文件。
 - `GET /api/settings` 返回 `{dashscope_configured, workspace_id, oss_configured}`，不返回任何密钥片段。
@@ -230,12 +230,12 @@ Expected: FAIL，路由/类型不存在。
 - `PipelineServer` 增加 `SecretStore? secretStore`；`start()` 在 bind 前 `readAll()` 并 `cfg.updateSecrets`；新增 `_settings` 字段并接 `ApiRoute.settings`。
 - `store == null` 时 `PUT` 返回 501 `secrets_unavailable`，`GET` 仍可读当前 cfg。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/server/settings_api_test.dart test/server/api_router_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/server/settings.dart lib/server/settings_controller.dart lib/server/api_router.dart \
@@ -262,7 +262,7 @@ git commit -m "feat(server): 设置 API 与密钥存储抽象"
   - `startPipelineServer({..., SecretStore? secretStore})`（删除 `env` 参数）
 - Consumes: Task 3 的 `SecretStore` / `PipelineServer(secretStore:)`。
 
-- [ ] **Step 1: 写原生通道与 Dart 平台存储**
+- [x] **Step 1: 写原生通道与 Dart 平台存储**
 
 Swift 在 `MainFlutterWindow.awakeFromNib` 里注册 `viva/secrets`：
 
@@ -317,7 +317,7 @@ class PlatformSecretStore implements SecretStore {
 
 `_fallbackFile()`：macOS 不会走到；Windows 用 `%APPDATA%/Viva/secrets.json`，其他用 `$HOME/.viva/secrets.json`；写入后 `chmod 600`（非 Windows）。
 
-- [ ] **Step 2: 接线启动并移除 `.env`**
+- [x] **Step 2: 接线启动并移除 `.env`**
 
 - `main.dart` 删除 `flutter_dotenv` import 与 `_resolveEnv`；创建 `PlatformSecretStore()`，传给 `startPipelineServer(secretStore: ...)`。
 - `start.dart` 删除 `env` 参数；`_loadConfig()` 用 `env: const {}`（桌面端不再读进程环境或 `.env`）；`PipelineServer(..., secretStore: secretStore)`。
@@ -325,7 +325,7 @@ class PlatformSecretStore implements SecretStore {
 - 删除 `lib/speaker_tool/speaker_env.dart` 与 `.env.example`。
 - `Makefile setup` 只复制 `pipeline_config.json`，帮助文案删掉 `.env`。
 
-- [ ] **Step 3: 编译与离线测试**
+- [x] **Step 3: 编译与离线测试**
 
 Run:
 
@@ -337,11 +337,11 @@ make test-dart
 
 Expected: 零告警，Dart 测试全绿；不出现 `flutter_dotenv` 引用。
 
-- [ ] **Step 4: macOS 手工验证 Keychain**
+- [x] **Step 4: macOS 手工验证 Keychain**
 
 Run: `make run`，在设置页填入测试 key，保存后关闭再打开应用；确认设置页仍显示「已配置」，且 `security find-generic-password -s com.conatusviva.secrets -a DASHSCOPE_API_KEY -w` 能取到值（不要把输出贴进日志）。未完成 Task 5 前先跳过 UI 步骤，只验证通道可调用。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/platform_secret_store.dart macos/Runner/MainFlutterWindow.swift lib/main.dart \
@@ -370,7 +370,7 @@ git commit -m "feat(settings): macOS Keychain 存储并移除 .env 读取"
   - `<SettingsDialog onClose={() => void} initialStatus?: SettingsStatus />`
 - Consumes: Task 3 的 `/api/settings`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `settings.test.tsx` 用 `renderToString`：
 
@@ -387,23 +387,23 @@ it('renders unconfigured status and never renders a secret value', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd frontend && npx vitest run src/settings/settings.test.tsx`
 Expected: FAIL，组件不存在。
 
-- [ ] **Step 3: 实现设置弹窗与入口**
+- [x] **Step 3: 实现设置弹窗与入口**
 
 - `SettingsDialog`：API Key 用 `type="password"`；Workspace ID 文本框；OSS 折叠区；保存/清除按钮；加载 `GET /api/settings`；保存后显示「已保存」，不显示密钥。
 - `App.tsx` 增加固定右上角「设置」按钮与 `settingsOpen` 状态；空态/工作台都能打开。
 - 样式放 `Settings.css`，不引入新依赖；不使用原生对话框。
 
-- [ ] **Step 4: 更新文档**
+- [x] **Step 4: 更新文档**
 
 - README：`make setup` 只建 `pipeline_config.json`；密钥改成「打开应用 → 设置 → 填 API Key」；删除 `.env` 段落。
 - AGENTS：密钥约束改为 Keychain / 0600 文件、不读 `.env`；`make setup` 文案同步；提交检查清单把 `.env` 改成「密钥文件」。
 
-- [ ] **Step 5: 测试、构建、提交**
+- [x] **Step 5: 测试、构建、提交**
 
 Run:
 
@@ -450,7 +450,7 @@ git commit -m "feat(web): 设置页录入百炼与 OSS 密钥"
   - `DramaStore.seriesAssetFile(String seriesId, String relativePath)`
 - Consumes: `dramaHash`、`Shot`、`ShotRoute`。
 
-- [ ] **Step 1: 写 hash 与 plan 失败测试**
+- [x] **Step 1: 写 hash 与 plan 失败测试**
 
 ```dart
 test('frame hash changes when cast avatar or visual changes', () {
@@ -466,24 +466,24 @@ test('plan view reads route and i2v seconds', () {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/drama/hashes_test.dart test/pipeline/drama/plan_view_test.dart`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - Hash 输入只含影响画面的字段：cast = name/description/model/size；frame = visual（空时用 line）+ framing + kind + speaker + castAvatarHash + model + size；clip = frameHash + motion + route + model + resolution + i2vSeconds。
 - `DramaPlanView` 只读 `plan['shots']`；未知 shot 返回 `ShotRoute.micro`、0 秒、2.0 秒。
 - 状态/剧模型加增量方法，保持所有字段复制。
 - `seriesAssetFile` 与 `assetFile` 同样的逃逸校验，根目录是 `seriesDir(seriesId)`。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/drama/hashes_test.dart test/pipeline/drama/plan_view_test.dart test/pipeline/drama/state_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/drama/hashes.dart lib/pipeline/drama/plan_view.dart lib/pipeline/drama/state.dart \
@@ -517,7 +517,7 @@ git commit -m "feat(short-drama): 产物 hash、计划单视图与状态增量�
   - `DramaEstimate` 增 `i2vEstimatedYuan`；预算快照增 `i2vTotalYuan` / `i2vActualYuan` / `i2vRemainingYuan`。
 - Consumes: Task 6 的 hash、plan view、store 资产检查。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```dart
 final testPricing = DramaPricing(
@@ -541,12 +541,12 @@ test('new estimate request rejects unknown step', () {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/drama/cost_test.dart test/server/drama_api_test.dart`
 Expected: FAIL，旧 `targets` 签名不匹配。
 
-- [ ] **Step 3: 实现估算**
+- [x] **Step 3: 实现估算**
 
 - `DramaPricing.catalog()` 用目录默认价；server 构造时用 `resolvePrices(defaults, overrides: cfg.imagePrices/videoPrices)` 覆盖。
 - 请求解析只接受 `{step, cast_ids?, shot_ids?, target?, force?}`；**不保留 `targets`**。
@@ -556,12 +556,12 @@ Expected: FAIL，旧 `targets` 签名不匹配。
 - 预算快照：`i2v_actual` = 已成功 i2v clip 的 cost 之和；`i2v_remaining = max(0, i2v_budget - i2v_actual)`。
 - Controller `_estimate` 改读新 body；`DramaController` 构造增加 `pricing`（默认目录价）。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/drama/cost_test.dart test/server/drama_api_test.dart`
 Expected: PASS；旧的 `targets` 测试已删除或改成新格式。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/drama/pricing.dart lib/pipeline/drama/run_target.dart lib/pipeline/drama/cost.dart \
@@ -584,7 +584,7 @@ git commit -m "feat(short-drama): 定妆与画面估算改用新格式"
   - 原 `kenBurnsArgs` / `normalizeArgs` 委托新函数，默认值不变。
 - Consumes: 现有 `runFfmpeg`、`mediaDurationSeconds`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```dart
 test('kenBurnsArgsFor emits 1080x1920/24fps', () {
@@ -598,21 +598,21 @@ test('micro is gentler than kenburns', () {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/ffmpeg_test.dart`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现并保留默认包装**
+- [x] **Step 3: 实现并保留默认包装**
 
 默认 `kenBurnsArgs` / `normalizeArgs` 输出参数必须与现在逐字一致；新增竖屏测试跑真实 ffmpeg，断言输出 1080×1920。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/ffmpeg_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/ffmpeg.dart test/pipeline/ffmpeg_test.dart
@@ -632,7 +632,7 @@ git commit -m "feat(ffmpeg): 支持竖屏参数化 kenburns 与 normalize"
   - `class DashScopeDramaMediaGateway implements DramaMediaGateway`（构造：`cfg`、`pricing`、`http.Client?`、`sleep`）。
 - Consumes: `buildImageClient`、`generateImages`、`I2vClient`、`Base64ImageUrlProvider`、Task 8 的 ffmpeg 助手。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```dart
 test('gateway fails before network when API key is missing', () async {
@@ -651,12 +651,12 @@ test('local clip writes a playable 1080x1920 mp4 at zero cost', () async {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/drama/media_gateway_test.dart`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - 图片：先 `cfg.requireApiKey()`；`findImageModel` 未知模型抛 `PipelineError`；refFiles 转 data URL；`generateImages` 写到 `<baseDir>/<contentId>/image-01.png`；全部下载失败抛 `PipelineError`；cost 用 job.cost。
 - i2v：先 `requireApiKey()`；`I2vClient(model, resolution, cfg.apiHost, watermark: true, seed: cfg.i2vSeed)`；首帧用 `Base64ImageUrlProvider().publish`；submit → 按 `cfg.i2vPollSeconds` 轮询到 `cfg.i2vMaxWaitMinutes`；成功下载到 `outFile`（`.tmp` + rename）；失败直接抛，**不自动重试**；cost = `durationS × videoPrice`。
@@ -664,12 +664,12 @@ Expected: FAIL。
 - `normalizeClip`：`normalizeArgsFor` + 校验时长。
 - 文件写入前 `parent.createSync(recursive: true)`。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/drama/media_gateway_test.dart`
 Expected: PASS（真实网络不参与）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/drama/media_gateway.dart test/pipeline/drama/media_gateway_test.dart
@@ -693,7 +693,7 @@ git commit -m "feat(short-drama): 图片/i2v/本地片段媒体网关"
   - `enum DramaRunTarget { frame, clip, all }`（复用 Task 7 的 `run_target.dart`）
 - Consumes: Task 6/7/9 的 hash、pricing、gateway、store。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```dart
 test('cast run persists avatar, cost, and skips on second run', () async {
@@ -716,12 +716,12 @@ test('force regenerates even when cache matches', () async {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/drama/runner_test.dart`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现 cast + run 生命周期**
+- [x] **Step 3: 实现 cast + run 生命周期**
 
 - `DramaRun` 暴露 `Future<void> done`（Completer），供测试与控制器等待；异步执行用 `unawaited`。
 - 同一集已有 running run → `StateError('episode_busy')`。
@@ -732,12 +732,12 @@ Expected: FAIL。
 - `cancel` 置标记，当前项完成后停止，run `cancelled`。
 - `recoverOrphan`：state.activeRun 不存在于内存 → 把 running 工序改 `interrupted`、清 activeRun。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/drama/runner_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/drama/runner.dart lib/pipeline/drama/run_registry.dart \
@@ -758,7 +758,7 @@ git commit -m "feat(short-drama): 定妆执行器与 run 生命周期"
   - 单镜降级：`degrade: true` 时忽略 plan 路由，走 `ShotRoute.kenburns`。
 - Consumes: Task 6 的 frame/clip hash、Task 7 的 plan view、Task 9 的 gateway。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```dart
 test('frame run generates frame then i2v clip with costs', () async {
@@ -788,12 +788,12 @@ test('one failing shot does not stop the batch', () async {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/pipeline/drama/runner_test.dart`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现 frame/clip**
+- [x] **Step 3: 实现 frame/clip**
 
 - 取 plan；`target` 控制只跑 frame / clip / both。
 - frame：hash 一致 + 文件存在 + 未 force → skip；否则 `generateImage`，speaker 有已采用 avatar 时用 i2i + refFiles，否则 t2i；写 `assets/frames/<shot>/<hash>/image-01.png`。
@@ -803,12 +803,12 @@ Expected: FAIL。
 - `degrade: true` 强制 `kenburns`，费用 0。
 - 更新 `DramaEpisodeState.withShot`；每次成功/失败都落盘。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/pipeline/drama/runner_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/drama/runner.dart test/pipeline/drama/runner_test.dart
@@ -832,7 +832,7 @@ git commit -m "feat(short-drama): 画面执行器、缓存与本地降级"
   - `GET .../runs/<id>`、`POST .../runs/<id>:cancel`、`GET .../assets/<path>`、`GET /api/drama/series/<sid>/assets/<path>`
 - Consumes: Task 7/10/11。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```dart
 test('POST frame run returns 202, poll completes, assets serve png', () async {
@@ -873,12 +873,12 @@ test('voice run stays 501', () async {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `dart test test/server/drama_api_test.dart test/pipeline/drama/steps_test.dart`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现路由与推导**
+- [x] **Step 3: 实现路由与推导**
 
 - `parseDramaRoute`：`steps/<key>:run`、`shots/<id>:run`、`runs/<id>`、`runs/<id>:cancel`、`assets/...`、series `assets/...`。
 - `_runStep`：校验 step ∈ cast/frame；`estimate`；超总预算或 i2v 预算 → 409 `budget_exceeded`；`runner.startStep`；202 `{run_id}`。
@@ -889,12 +889,12 @@ Expected: FAIL。
 - `_bundle` 先 `runner.recoverOrphan`；`wired` 用 `runner == null ? kP1WiredSteps : kDramaWiredSteps`；capabilities cast/frame 随 runner 可用。
 - `deriveDramaSteps`：cast/frame 的 `status` 支持 `stale`（artifact hash 与当前 hash 不一致）；`cost_yuan` 从 artifact 求和；frame 完成 = 所有镜头 clip 成功且 hash 一致。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `dart test test/server/drama_api_test.dart test/pipeline/drama/steps_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add lib/pipeline/drama/controller.dart lib/pipeline/drama/steps.dart lib/server/pipeline_server.dart \
@@ -927,7 +927,7 @@ git commit -m "feat(short-drama): run/资产端点与失效推导"
   - `isTerminalRun(status)` / `runSummary(run)`
 - Consumes: Task 7/12 的 wire 格式。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('encodes every path segment', () => {
@@ -940,19 +940,19 @@ it('terminal statuses', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd frontend && npx vitest run src/shortDrama/asset.test.ts`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现类型与客户端**
+- [x] **Step 3: 实现类型与客户端**
 
 - 新 `EstimateInput = {step:"story"|"storyboard"|"cast"|"frame"; cast_ids?; shot_ids?; target?; force?}`。
 - `runStep` 返回 `{run_id:string}`；`getRun` 返回 `DramaRun`；`cancelRun` 返回 `{status:string}`。
 - `run.ts` 提供 `useDramaRun(seriesId, episodeId, onDone)`：启动后 1 秒轮询；终态停止并 `onDone()`；卸载时停止；错误转中文。
 - 所有资产 URL 逐段 `encodeURIComponent`。
 
-- [ ] **Step 4: 跑测试与类型检查**
+- [x] **Step 4: 跑测试与类型检查**
 
 Run:
 
@@ -962,7 +962,7 @@ cd frontend && npm test && npm run lint && npm run build
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/shortDrama/asset.ts frontend/src/shortDrama/run.ts \
@@ -984,7 +984,7 @@ git commit -m "feat(web): 短剧 run 类型、API 与资产地址"
 - Consumes: Task 13 的 `dramaApi` / `useDramaRun` / `seriesAssetUrl`、`DramaCostGate`。
 - Produces: CastStage props `{ bundle, onBundle, onReload }`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 it('cast stage shows avatar status and cost action without a fake progress', () => {
@@ -995,12 +995,12 @@ it('cast stage shows avatar status and cost action without a fake progress', () 
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd frontend && npx vitest run src/shortDrama/workbench.test.tsx`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - 角色卡：头像（`seriesAssetUrl`）、描述、状态（未生成 / 待采用 / 已采用）。
 - 「生成定妆」：`estimate({step:"cast", cast_ids:[id]})` → `DramaCostGate` → `runStep('cast', {cast_ids:[id]})` → 轮询 → `onReload()`.
@@ -1009,12 +1009,12 @@ Expected: FAIL。
 - 无角色时保持现有空态提示。
 - StageRouter 把 `onBundle`/`onReload` 传给 CastStage。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cd frontend && npm test && npm run lint`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/shortDrama/stages/CastStage.tsx frontend/src/shortDrama/StageRouter.tsx \
@@ -1037,7 +1037,7 @@ git commit -m "feat(web): 定妆工序生成、采用与预览"
 - Consumes: Task 13 的 run API / asset URL、Task 12 的 `state.shots`。
 - Produces: FrameStage props `{ bundle, selectedShotId, onSelectShot, onReload }`；Inspector 接收 `shotState`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 it('frame stage renders thumbnails and per-shot actions', () => {
@@ -1048,12 +1048,12 @@ it('frame stage renders thumbnails and per-shot actions', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd frontend && npx vitest run src/shortDrama/workbench.test.tsx`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现舞台**
+- [x] **Step 3: 实现舞台**
 
 - 镜头条显示首帧缩略图、clip 状态点、`stale/failed` 标记。
 - 批量：「生成全部首帧」`{step:"frame", target:"frame"}`；「生成全部片段」`{step:"frame", target:"clip"}`；都走 estimate → 闸门 → run → 1 秒轮询。
@@ -1063,7 +1063,7 @@ Expected: FAIL。
 - `DramaCostGate` 增加 i2v 预算行（有 `i2v_budget` 时显示）。
 - 无分镜/无计划保持现有空态；不伪造进度。
 
-- [ ] **Step 4: 测试、lint、构建、提交**
+- [x] **Step 4: 测试、lint、构建、提交**
 
 Run:
 
@@ -1096,7 +1096,7 @@ git commit -m "feat(web): 画面工序时间轴、批量生成与降级"
 - Consumes: Task 1-15 的全部实现。
 - Produces: 离线全绿证据 + 真实产物截图/路径 + 费用记录（不含密钥）。
 
-- [ ] **Step 1: 跑离线基线**
+- [x] **Step 1: 跑离线基线**
 
 Run:
 
@@ -1109,7 +1109,7 @@ cd frontend && npm run build
 
 Expected: 全部退出码 0；把结果写进验收记录。
 
-- [ ] **Step 2: 写 gated 真实 smoke（不默认运行）**
+- [x] **Step 2: 写 gated 真实 smoke（不默认运行）**
 
 `test/manual/drama_real_smoke.dart` 规则：
 
@@ -1126,9 +1126,9 @@ Run（只有用户确认费用后才执行）:
 RUN_REAL_DRAMA=1 dart test test/manual/drama_real_smoke.dart
 ```
 
-Expected: PASS；费用约 ¥1.15（1 张定妆 + 1 张首帧 + 3 秒 i2v），以实际账单为准。
+Expected: PASS；费用约 ¥0.85（1 张定妆 + 1 张首帧 + 3 秒 i2v），以实际账单为准。
 
-- [ ] **Step 3: 手工核对 UI**
+- [x] **Step 3: 手工核对 UI**
 
 `make run` 后确认：
 
@@ -1138,7 +1138,7 @@ Expected: PASS；费用约 ¥1.15（1 张定妆 + 1 张首帧 + 3 秒 i2v），�
 - 运行中可取消；完成后底栏成本更新。
 - 空态、未接入的 voice/edit/pack 仍显示「未接入」。
 
-- [ ] **Step 4: 勾选与提交**
+- [x] **Step 4: 勾选与提交**
 
 把本计划任务 checkbox 与设计文档 P2 DoD 勾选，提交：
 
