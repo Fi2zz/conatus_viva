@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import StageRouter from "./StageRouter";
 import CanvasView from "./CanvasView";
 import WorkbenchShell from "./WorkbenchShell";
+import CastStage from "./stages/CastStage";
 import { STEP_ORDER } from "./view";
 import type { EpisodeBundle, StepView } from "./types";
 
@@ -109,6 +110,33 @@ const bundle: EpisodeBundle = {
 const noop = () => undefined;
 
 describe("workbench smoke render", () => {
+  it("cast stage shows pending approval and actions", () => {
+    const withAvatar: EpisodeBundle = {
+      ...bundle,
+      series: {
+        ...bundle.series,
+        cast: {
+          erniu: {
+            ...bundle.series.cast.erniu,
+            avatar: {
+              path: "cast/erniu/hash/image-01.png",
+              source_hash: "sha256:hash",
+              model: "wan2.7-image",
+              cost_yuan: 0.2,
+              approved: false,
+            },
+          },
+        },
+      },
+    };
+    const html = renderToString(
+      <CastStage bundle={withAvatar} onBundle={noop} onReload={noop} />,
+    );
+    expect(html).toContain("待采用");
+    expect(html).toContain("重新生成");
+    expect(html).toContain("/api/drama/series/jietiao/assets/cast/erniu/hash/image-01.png");
+  });
+
   it("renders every stage without crashing", () => {
     for (const step of STEP_ORDER) {
       const html = renderToString(
@@ -125,8 +153,7 @@ describe("workbench smoke render", () => {
     }
   });
 
-  it("renders shell and canvas", () => {
-    expect(
+  it("renders shell and canvas", () => {    expect(
       renderToString(
         <WorkbenchShell
           bundle={bundle}

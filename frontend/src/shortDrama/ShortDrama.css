@@ -1726,3 +1726,46 @@
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* ── 定妆 / 运行面板 ───────────────────── */
+
+.sd-cast-avatar {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+
+.sd-cast-avatar.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.sd-run-panel {
+  border: 1px solid var(--line);
+}
+
+.sd-run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.sd-run-log {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  max-height: 160px;
+  overflow: auto;
+}

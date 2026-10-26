@@ -40,7 +40,13 @@ export default function StageRouter(props: StageRouterProps) {
         />
       );
     case "cast":
-      return <CastStage bundle={bundle} />;
+      return (
+        <CastStage
+          bundle={bundle}
+          onBundle={onBundle}
+          onReload={onReload}
+        />
+      );
     case "board":
       return (
         <BoardStage
