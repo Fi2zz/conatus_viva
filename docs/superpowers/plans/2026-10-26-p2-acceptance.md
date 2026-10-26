@@ -9,7 +9,7 @@
 | 命令 | 结果 |
 |---|---|
 | `make analyze` | No issues found |
-| `make test-dart` | 394 tests passed |
+| `make test-dart` | 402 tests passed |
 | `make test-web` | vitest 62 passed / oxlint / check:dialogs 全绿 |
 | `cd frontend && npm run build` | 构建成功 |
 | `make web` | `web_build/` 与源码一致 |
@@ -52,4 +52,5 @@
 - 旧图片/视频接口的缺 key 文案改为「请在「设置」中填写」。
 - `failed / interrupted` 工序状态不再遮蔽已推导成功的状态；推导仍为 pending 时才显示失败。
 - P2.5：`establishing` 定场镜头自动走 t2v，不生成首帧；t2v 按配置单价计入总预算，失败不自动重试。
+- 真实 t2v smoke：`RUN_REAL_T2V=1` 通过，估算 ¥0.84 / 实际 ¥0.84（1 条 2 秒 establishing 镜头）。
 
