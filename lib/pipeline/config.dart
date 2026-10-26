@@ -209,8 +209,12 @@ class PipelineConfig {
   String get workspaceId => effectiveWorkspaceId;
 
   /// LLM 兼容接口地址；显式配置优先，否则跟随 [apiHost]。
-  String get baseUrl =>
-      _configuredBaseUrl ?? '$apiHost/compatible-mode/v1';
+  String get baseUrl {
+    final configured = _configuredBaseUrl;
+    return configured == null || configured.isEmpty
+        ? '$apiHost/compatible-mode/v1'
+        : configured;
+  }
 
   final Map<String, String> _env;
 
