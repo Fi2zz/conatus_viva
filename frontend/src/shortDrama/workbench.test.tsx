@@ -189,6 +189,62 @@ describe("workbench smoke render", () => {
     expect(html).toContain("assets/frames/s01/hash/image-01.png");
   });
 
+  it("shows t2v route and hides the frame action for an establishing shot", () => {
+    const withPlan: EpisodeBundle = {
+      ...bundle,
+      plan: {
+        content_id: "ep07",
+        title: "堂屋对峙",
+        frame: { width: 1080, height: 1920 },
+        i2v_generation: {
+          model: "wan2.6-i2v-flash",
+          resolution: "720P",
+          width: 720,
+          height: 1280,
+        },
+        budget_yuan: 20,
+        price_yuan_per_second: 0.15,
+        max_i2v_seconds: 0,
+        shots: [
+          {
+            shot_id: "s01",
+            kind: "establishing",
+            route: "t2v",
+            avatar: false,
+            duration_s: 2,
+            i2v_seconds: 0,
+            cost_yuan: 0.84,
+            downgrade_reason: null,
+            framing: "全景",
+            speaker: null,
+            line: "",
+            priority: "normal",
+          },
+        ],
+        totals: {
+          duration_s: 2,
+          i2v_seconds: 0,
+          estimated_yuan: 0.84,
+          remaining_yuan: 20,
+          total_remaining_yuan: 119.16,
+        },
+        counts: { kenburns: 0, micro: 0, i2v: 0, t2v: 1 },
+        warnings: [],
+      },
+    };
+    const html = renderToString(
+      <FrameStage
+        bundle={withPlan}
+        selectedShotId="s01"
+        onSelectShot={noop}
+        onReload={noop}
+      />,
+    );
+    expect(html).toContain("文生视频");
+    expect(html).not.toContain("生成首帧");
+    expect(html).toContain("t2v");
+  });
+
   it("renders every stage without crashing", () => {    for (const step of STEP_ORDER) {
       const html = renderToString(
         <StageRouter
