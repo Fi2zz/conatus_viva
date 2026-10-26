@@ -17,9 +17,7 @@ help: ## 列出可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-setup: ## 从示例创建 .env 与 pipeline_config.json（已存在则跳过）
-	@if [ -f .env ]; then echo ".env 已存在，跳过"; else \
-		cp .env.example .env; echo "已创建 .env —— 请填入 DASHSCOPE_API_KEY"; fi
+setup: ## 从示例创建 pipeline_config.json（已存在则跳过）
 	@if [ -f pipeline_config.json ]; then echo "pipeline_config.json 已存在，跳过"; else \
 		cp pipeline_config.example.json pipeline_config.json; echo "已创建 pipeline_config.json —— 可按需填写 workspace_id / pricing"; fi
 

@@ -42,7 +42,6 @@ dependencies:
   args: ^2.6.0
   http: ^1.2.0
   crypto: ^3.0.3
-  flutter_dotenv: ^5.2.1
   webview_flutter: ^4.10.0
 
 dev_dependencies:
@@ -70,7 +69,6 @@ flutter:
 
   assets:
     - assets/images/
-    - .env
     - web_build/
     - web_build/assets/
   # To add assets to your application, add an assets section, like this:

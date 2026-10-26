@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_wanxiang/pipeline/config.dart';
 import 'package:flutter_wanxiang/server/pipeline_server.dart';
+import 'package:flutter_wanxiang/server/settings.dart';
 
 /// Loads config from the app's working directory and starts the pipeline
 /// server. Returns the bound URL (e.g. `http://localhost:18080`).
@@ -15,16 +16,15 @@ import 'package:flutter_wanxiang/server/pipeline_server.dart';
 ///
 /// If [port] is already in use, the next 10 ports are tried automatically.
 ///
-/// [env] is the environment the config reads secrets from; null → the process
-/// environment (packaged apps pass the merged `.env` + process map so a
-/// bundled `.env` can supply `DASHSCOPE_API_KEY`).
+/// Secrets come from [secretStore] (macOS Keychain / file fallback), never
+/// from `.env` or the process environment.
 Future<String> startPipelineServer({
   int port = 18080,
   String? staticDir,
   File? avatarImage,
-  Map<String, String>? env,
+  SecretStore? secretStore,
 }) async {
-  final cfg = await _loadConfig(env: env);
+  final cfg = await _loadConfig();
   final staticDirPath = Directory(staticDir ?? _resolveStaticDir());
 
   var actualPort = port;
@@ -36,6 +36,7 @@ Future<String> startPipelineServer({
         staticDir: staticDirPath,
         port: actualPort,
         avatarImage: avatarImage,
+        secretStore: secretStore,
       );
       await server.start();
       break;
@@ -52,15 +53,16 @@ Future<String> startPipelineServer({
   return 'http://localhost:$actualPort';
 }
 
-Future<PipelineConfig> _loadConfig({Map<String, String>? env}) async {
-  final resolvedEnv = env ?? Platform.environment;
+Future<PipelineConfig> _loadConfig() async {
   final configFile = File('pipeline_config.json');
   if (await configFile.exists()) {
-    return PipelineConfig.load(file: configFile, env: resolvedEnv);
+    return PipelineConfig.load(
+      file: configFile,
+      env: const <String, String>{},
+    );
   }
   // Fallback to defaults when no config file is present (development mode).
-  // env is threaded through so the API key is still read from the process
-  // environment in a packaged build with no config file on disk.
+  // Secrets are supplied later by the injected SecretStore.
   return PipelineConfig(
     llmModel: 'qwen3.8-flash',
     ttsModel: 'qwen-audio-3.1-tts-flash',
@@ -79,7 +81,6 @@ Future<PipelineConfig> _loadConfig({Map<String, String>? env}) async {
     targetCount: 4,
     minClipS: 2,
     maxClipS: 15,
-    env: resolvedEnv,
   );
 }
 

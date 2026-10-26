@@ -4,15 +4,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'platform_secret_store.dart';
 import 'server/start.dart';
 import 'server/web_build_assets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final env = await _resolveEnv();
   final staticDir = await materializeWebBuild(rootBundle);
   final avatarImage = await materializeAssetFile(
     rootBundle,
@@ -22,23 +21,9 @@ Future<void> main() async {
   final url = await startPipelineServer(
     staticDir: staticDir.path,
     avatarImage: avatarImage,
-    env: env,
+    secretStore: PlatformSecretStore(),
   );
   runApp(SpeakerApp(serverUrl: url));
-}
-
-/// Process environment plus an optional bundled `.env`.
-///
-/// Exported variables win; the bundled `.env` supplies `DASHSCOPE_API_KEY` when
-/// the app is launched from Finder (no shell environment). A missing `.env` is
-/// fine — the merge just falls back to the process environment.
-Future<Map<String, String>> _resolveEnv() async {
-  try {
-    await dotenv.load(fileName: '.env', mergeWith: const <String, String>{});
-  } catch (_) {
-    // .env is optional.
-  }
-  return <String, String>{...Platform.environment, ...dotenv.env};
 }
 
 class SpeakerApp extends StatelessWidget {

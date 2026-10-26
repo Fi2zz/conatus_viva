@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import Security
 import UniformTypeIdentifiers
 
 class MainFlutterWindow: NSWindow {
@@ -11,6 +12,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     registerFilePicker(flutterViewController)
+    registerSecrets(flutterViewController)
 
     super.awakeFromNib()
   }
@@ -52,6 +54,111 @@ class MainFlutterWindow: NSWindow {
           ])
         }
         result(picked)
+      }
+    }
+  }
+
+  /// Stores provider credentials in the login Keychain. Secrets never leave
+  /// this function except as method-channel return values.
+  private func registerSecrets(_ controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "viva/secrets",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "readAll":
+        result(Self.readAllSecrets())
+      case "writeAll":
+        guard let values = call.arguments as? [String: String] else {
+          result(FlutterError(
+            code: "invalid_args",
+            message: "expected a string map",
+            details: nil
+          ))
+          return
+        }
+        do {
+          try Self.writeAllSecrets(values)
+          result(nil)
+        } catch {
+          result(FlutterError(
+            code: "keychain",
+            message: "Keychain write failed",
+            details: nil
+          ))
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private static let keychainService = "com.conatusviva.secrets"
+  private static let keychainAccounts = [
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_WORKSPACE_ID",
+    "OSS_ACCESS_KEY_ID",
+    "OSS_ACCESS_KEY_SECRET",
+  ]
+
+  private static func keychainQuery(account: String) -> [String: Any] {
+    return [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: keychainService,
+      kSecAttrAccount as String: account,
+    ]
+  }
+
+  private static func readAllSecrets() -> [String: String] {
+    var out: [String: String] = [:]
+    for account in keychainAccounts {
+      var query = keychainQuery(account: account)
+      query[kSecReturnData as String] = true
+      query[kSecMatchLimit as String] = kSecMatchLimitOne
+      var item: CFTypeRef?
+      let status = SecItemCopyMatching(query as CFDictionary, &item)
+      guard status == errSecSuccess,
+            let data = item as? Data,
+            let value = String(data: data, encoding: .utf8) else {
+        continue
+      }
+      out[account] = value
+    }
+    return out
+  }
+
+  private static func writeAllSecrets(_ values: [String: String]) throws {
+    for account in keychainAccounts {
+      let value = values[account] ?? ""
+      if value.isEmpty {
+        SecItemDelete(keychainQuery(account: account) as CFDictionary)
+        continue
+      }
+      let data = Data(value.utf8)
+      let updateStatus = SecItemUpdate(
+        keychainQuery(account: account) as CFDictionary,
+        [kSecValueData as String: data] as CFDictionary
+      )
+      if updateStatus == errSecItemNotFound {
+        var add = keychainQuery(account: account)
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        if addStatus != errSecSuccess {
+          throw NSError(
+            domain: NSOSStatusErrorDomain,
+            code: Int(addStatus),
+            userInfo: nil
+          )
+        }
+      } else if updateStatus != errSecSuccess {
+        throw NSError(
+          domain: NSOSStatusErrorDomain,
+          code: Int(updateStatus),
+          userInfo: nil
+        )
       }
     }
   }
