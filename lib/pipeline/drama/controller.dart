@@ -19,6 +19,8 @@ import 'ids.dart';
 import 'json.dart';
 import 'llm.dart';
 import 'pricing.dart';
+import 'runner.dart';
+import 'run_target.dart';
 import 'series.dart';
 import 'steps.dart';
 import 'store.dart';
@@ -41,6 +43,10 @@ enum DramaRoute {
   draftStoryboard,
   runStep,
   runShot,
+  runStatus,
+  cancelRun,
+  asset,
+  seriesAsset,
 }
 
 /// 解析 `api/drama/...` 路径；未知返回 null。
@@ -62,10 +68,21 @@ DramaRoute? parseDramaRoute(String method, List<String> segments) {
     if (method == 'DELETE') return DramaRoute.deleteSeries;
     return null;
   }
+  if (segments.length >= 6 &&
+      segments[4] == 'assets' &&
+      method == 'GET') {
+    return DramaRoute.seriesAsset;
+  }
   if (segments.length == 5 &&
       segments[4] == 'episodes' &&
       method == 'POST') {
     return DramaRoute.createEpisode;
+  }
+  if (segments.length >= 8 &&
+      segments[4] == 'episodes' &&
+      segments[6] == 'assets' &&
+      method == 'GET') {
+    return DramaRoute.asset;
   }
   if (segments.length == 6 && segments[4] == 'episodes') {
     if (method == 'GET') return DramaRoute.getEpisode;
@@ -84,11 +101,20 @@ DramaRoute? parseDramaRoute(String method, List<String> segments) {
     }
     return null;
   }
-  if (segments.length == 8 && segments[4] == 'episodes' && method == 'POST') {
-    final kind = segments[6];
-    final action = segments[7];
-    if (kind == 'steps' && action.endsWith(':run')) return DramaRoute.runStep;
-    if (kind == 'shots' && action.endsWith(':run')) return DramaRoute.runShot;
+  if (segments.length == 8 && segments[4] == 'episodes') {
+    if (segments[6] == 'runs') {
+      if (method == 'GET') return DramaRoute.runStatus;
+      if (method == 'POST' && segments[7].endsWith(':cancel')) {
+        return DramaRoute.cancelRun;
+      }
+      return null;
+    }
+    if (method == 'POST') {
+      final kind = segments[6];
+      final action = segments[7];
+      if (kind == 'steps' && action.endsWith(':run')) return DramaRoute.runStep;
+      if (kind == 'shots' && action.endsWith(':run')) return DramaRoute.runShot;
+    }
   }
   return null;
 }
@@ -100,6 +126,7 @@ class DramaController {
     required this.drafts,
     required this.priceYuanPerSecond,
     DramaPricing? pricing,
+    this.runner,
     this.maxBodyBytes = 2 * 1024 * 1024,
   }) : pricing = pricing ?? DramaPricing.catalog();
 
@@ -107,11 +134,12 @@ class DramaController {
   final DramaDraftService drafts;
   final double priceYuanPerSecond;
   final DramaPricing pricing;
+  final DramaRunner? runner;
   final int maxBodyBytes;
 
-  static const Map<String, bool> _capabilities = <String, bool>{
-    'cast': false,
-    'frame': false,
+  Map<String, bool> get _capabilities => <String, bool>{
+    'cast': runner != null,
+    'frame': runner != null,
     'voice': false,
     'edit': false,
     'pack': false,
@@ -126,7 +154,9 @@ class DramaController {
     }
 
     final seriesId = segments.length > 3 ? segments[3] : null;
-    final episodeId = segments.length > 5 ? segments[5] : null;
+    final episodeId = segments.length > 5 && segments[4] == 'episodes'
+        ? segments[5]
+        : null;
     if (seriesId != null && !isDramaId(seriesId)) {
       await _error(req, HttpStatus.badRequest, 'invalid series id', 'invalid_id');
       return;
@@ -167,13 +197,22 @@ class DramaController {
         case DramaRoute.draftStoryboard:
           await _draftStoryboard(req, seriesId!, episodeId!);
         case DramaRoute.runStep:
+          await _runStep(req, seriesId!, episodeId!, segments[7]);
         case DramaRoute.runShot:
-          await _error(
+          await _runShot(req, seriesId!, episodeId!, segments[7]);
+        case DramaRoute.runStatus:
+          await _getRun(req, episodeId!, segments[7]);
+        case DramaRoute.cancelRun:
+          await _cancelRun(req, episodeId!, segments[7]);
+        case DramaRoute.asset:
+          await _getAsset(
             req,
-            HttpStatus.notImplemented,
-            '该工序尚未接入',
-            'not_wired',
+            seriesId!,
+            episodeId!,
+            segments.sublist(7).join('/'),
           );
+        case DramaRoute.seriesAsset:
+          await _getSeriesAsset(req, seriesId!, segments.sublist(5).join('/'));
       }
     } on FormatException catch (e) {
       await _error(req, HttpStatus.badRequest, e.message, 'invalid_body');
@@ -442,10 +481,258 @@ class DramaController {
     await _sendJson(req, HttpStatus.ok, result.toJson());
   }
 
+  Future<void> _runStep(
+    HttpRequest req,
+    String seriesId,
+    String episodeId,
+    String action,
+  ) async {
+    if (runner == null) {
+      await _error(req, HttpStatus.notImplemented, '该工序尚未接入', 'not_wired');
+      return;
+    }
+    final key = action.split(':').first;
+    final step = dramaStepFromKey(key);
+    if (step != DramaStep.cast && step != DramaStep.frame) {
+      await _error(req, HttpStatus.notImplemented, '该工序尚未接入', 'not_wired');
+      return;
+    }
+    final body = await _bodyOrError(req) ?? <String, Object?>{};
+    final DramaEstimateRequest request;
+    try {
+      request = parseDramaEstimateRequest(<String, Object?>{
+        ...body,
+        'step': step == DramaStep.cast ? 'cast' : 'frame',
+      });
+    } on ArgumentError catch (e) {
+      await _error(req, HttpStatus.badRequest, '${e.message}', 'invalid_body');
+      return;
+    }
+    final series = store.readSeries(seriesId);
+    final episode = store.readEpisode(seriesId, episodeId);
+    final estimate = estimateDrama(
+      series: series,
+      episode: episode,
+      state: store.readState(seriesId, episodeId),
+      storyboard: store.readStoryboard(seriesId, episodeId),
+      planJson: store.readPlanJson(seriesId, episodeId),
+      request: request,
+      pricing: pricing,
+      store: store,
+    );
+    if (estimate.totalEstimatedYuan > estimate.budget.remainingYuan) {
+      await _error(
+        req,
+        HttpStatus.conflict,
+        '估算 ¥${estimate.totalEstimatedYuan.toStringAsFixed(2)} 超过剩余预算 '
+        '¥${estimate.budget.remainingYuan.toStringAsFixed(2)}',
+        'budget_exceeded',
+      );
+      return;
+    }
+    if (estimate.i2vEstimatedYuan > estimate.budget.i2vRemainingYuan) {
+      await _error(
+        req,
+        HttpStatus.conflict,
+        'i2v 估算 ¥${estimate.i2vEstimatedYuan.toStringAsFixed(2)} 超过剩余 i2v 预算 '
+        '¥${estimate.budget.i2vRemainingYuan.toStringAsFixed(2)}',
+        'budget_exceeded',
+      );
+      return;
+    }
+    try {
+      final run = await runner!.startStep(
+        seriesId: seriesId,
+        episodeId: episodeId,
+        step: step!,
+        castIds: request.castIds,
+        shotIds: request.shotIds,
+        target: request.target,
+        force: request.force,
+      );
+      await _sendJson(req, HttpStatus.accepted, <String, Object?>{
+        'run_id': run.id,
+      });
+    } on StateError catch (e) {
+      await _error(req, HttpStatus.conflict, e.message, e.message);
+    } on ArgumentError catch (e) {
+      await _error(req, HttpStatus.badRequest, '${e.message}', 'invalid_body');
+    }
+  }
+
+  Future<void> _runShot(
+    HttpRequest req,
+    String seriesId,
+    String episodeId,
+    String action,
+  ) async {
+    if (runner == null) {
+      await _error(req, HttpStatus.notImplemented, '该工序尚未接入', 'not_wired');
+      return;
+    }
+    final shotId = action.split(':').first;
+    final body = await _bodyOrError(req) ?? <String, Object?>{};
+    final targetRaw = body['target'];
+    final target = targetRaw == null
+        ? DramaRunTarget.all
+        : DramaRunTarget.values
+              .where((candidate) => candidate.name == targetRaw)
+              .firstOrNull;
+    if (target == null) {
+      await _error(req, HttpStatus.badRequest, 'target 非法', 'invalid_body');
+      return;
+    }
+    final force = body['force'] == true;
+    final degrade = body['degrade'] == true;
+    final series = store.readSeries(seriesId);
+    final episode = store.readEpisode(seriesId, episodeId);
+    final estimate = estimateDrama(
+      series: series,
+      episode: episode,
+      state: store.readState(seriesId, episodeId),
+      storyboard: store.readStoryboard(seriesId, episodeId),
+      planJson: store.readPlanJson(seriesId, episodeId),
+      request: DramaEstimateRequest(
+        step: DramaEstimateStep.frame,
+        shotIds: <String>[shotId],
+        target: target,
+        force: force,
+      ),
+      pricing: pricing,
+      store: store,
+    );
+    if (estimate.totalEstimatedYuan > estimate.budget.remainingYuan ||
+        estimate.i2vEstimatedYuan > estimate.budget.i2vRemainingYuan) {
+      await _error(req, HttpStatus.conflict, '估算超过剩余预算', 'budget_exceeded');
+      return;
+    }
+    try {
+      final run = await runner!.startShot(
+        seriesId: seriesId,
+        episodeId: episodeId,
+        shotId: shotId,
+        target: target,
+        force: force,
+        degrade: degrade,
+      );
+      await _sendJson(req, HttpStatus.accepted, <String, Object?>{
+        'run_id': run.id,
+      });
+    } on StateError catch (e) {
+      await _error(req, HttpStatus.conflict, e.message, e.message);
+    } on ArgumentError catch (e) {
+      await _error(req, HttpStatus.badRequest, '${e.message}', 'invalid_body');
+    }
+  }
+
+  Future<void> _getRun(
+    HttpRequest req,
+    String episodeId,
+    String runId,
+  ) async {
+    final run = runner?.run(runId);
+    if (run == null) {
+      await _error(req, HttpStatus.notFound, 'run 不存在', 'not_found');
+      return;
+    }
+    await _sendJson(req, HttpStatus.ok, run.toJson());
+  }
+
+  Future<void> _cancelRun(
+    HttpRequest req,
+    String episodeId,
+    String action,
+  ) async {
+    if (runner == null) {
+      await _error(req, HttpStatus.notImplemented, 'run 不可用', 'not_wired');
+      return;
+    }
+    final runId = action.split(':').first;
+    if (runner!.run(runId) == null) {
+      await _error(req, HttpStatus.notFound, 'run 不存在', 'not_found');
+      return;
+    }
+    await runner!.cancel(runId);
+    await _sendJson(req, HttpStatus.accepted, <String, Object?>{
+      'status': 'cancelling',
+    });
+  }
+
+  Future<void> _getAsset(
+    HttpRequest req,
+    String seriesId,
+    String episodeId,
+    String relativePath,
+  ) async {
+    final File file;
+    try {
+      file = store.assetFile(seriesId, episodeId, relativePath);
+    } on ArgumentError catch (e) {
+      await _error(req, HttpStatus.badRequest, '${e.message}', 'path_escape');
+      return;
+    }
+    await _sendFile(req, file);
+  }
+
+  Future<void> _getSeriesAsset(
+    HttpRequest req,
+    String seriesId,
+    String relativePath,
+  ) async {
+    final File file;
+    try {
+      file = store.seriesAssetFile(seriesId, relativePath);
+    } on ArgumentError catch (e) {
+      await _error(req, HttpStatus.badRequest, '${e.message}', 'path_escape');
+      return;
+    }
+    await _sendFile(req, file);
+  }
+
+  Future<void> _sendFile(HttpRequest req, File file) async {
+    if (!file.existsSync() || FileSystemEntity.isDirectorySync(file.path)) {
+      await _error(req, HttpStatus.notFound, 'asset 不存在', 'not_found');
+      return;
+    }
+    final type = _contentType(file.path);
+    if (type == null) {
+      await _error(req, HttpStatus.notFound, '不支持的资源类型', 'not_found');
+      return;
+    }
+    req.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.parse(type);
+    await req.response.addStream(file.openRead());
+    await req.response.close();
+  }
+
+  static String? _contentType(String path) {
+    final dot = path.lastIndexOf('.');
+    final ext = dot < 0 ? '' : path.substring(dot + 1).toLowerCase();
+    switch (ext) {
+      case 'png':
+        return 'image/png';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'webp':
+        return 'image/webp';
+      case 'mp4':
+        return 'video/mp4';
+      case 'wav':
+        return 'audio/wav';
+      case 'srt':
+        return 'text/plain; charset=utf-8';
+      default:
+        return null;
+    }
+  }
+
   Future<Map<String, Object?>> _bundle(
     DramaSeries series,
     DramaEpisode episode,
   ) async {
+    runner?.recoverOrphan(series.seriesId, episode.episodeId);
     final board = store.readStoryboard(series.seriesId, episode.episodeId);
     final planJson = store.readPlanJson(series.seriesId, episode.episodeId);
     final state = store.readState(series.seriesId, episode.episodeId);
@@ -455,7 +742,7 @@ class DramaController {
       storyboard: board,
       planJson: planJson,
       state: state,
-      wired: kP1WiredSteps,
+      wired: runner == null ? kP1WiredSteps : kDramaWiredSteps,
     );
     return <String, Object?>{
       'series': series.toJson(),
@@ -574,4 +861,8 @@ class _BodyTooLarge extends _BodyResult {
 
 class _BodyInvalid extends _BodyResult {
   const _BodyInvalid();
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

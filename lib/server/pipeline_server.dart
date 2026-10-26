@@ -9,7 +9,9 @@ import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
 import 'package:flutter_wanxiang/pipeline/drama/controller.dart';
 import 'package:flutter_wanxiang/pipeline/drama/cost.dart';
 import 'package:flutter_wanxiang/pipeline/drama/llm.dart';
+import 'package:flutter_wanxiang/pipeline/drama/media_gateway.dart';
 import 'package:flutter_wanxiang/pipeline/drama/pricing.dart';
+import 'package:flutter_wanxiang/pipeline/drama/runner.dart';
 import 'package:flutter_wanxiang/pipeline/drama/store.dart';
 import 'package:flutter_wanxiang/pipeline/edit_models.dart';
 import 'package:flutter_wanxiang/pipeline/errors.dart';
@@ -221,17 +223,24 @@ class PipelineServer {
   }) : _runs = <String, RunRecord>{},
        _imageJobs = <String, JobRunRecord>{},
        _videoJobs = <String, JobRunRecord>{},
-       _settings = SettingsController(cfg: cfg, store: secretStore),
-       _drama =
-           dramaController ??
-           DramaController(
-             store: DramaStore(rootDir: dramaRoot ?? 'pipeline_out/drama'),
-             drafts: DramaDraftService(
-               llm: dramaLlm ?? QwenDramaLlm(cfg: cfg),
-             ),
-             priceYuanPerSecond: defaultDramaI2vPriceYuanPerSecond(),
-             pricing: dramaPricingFromConfig(cfg),
-           );
+       _settings = SettingsController(cfg: cfg, store: secretStore) {
+    final store = DramaStore(rootDir: dramaRoot ?? 'pipeline_out/drama');
+    final pricing = dramaPricingFromConfig(cfg);
+    _drama =
+        dramaController ??
+        DramaController(
+          store: store,
+          drafts: DramaDraftService(
+            llm: dramaLlm ?? QwenDramaLlm(cfg: cfg),
+          ),
+          priceYuanPerSecond: defaultDramaI2vPriceYuanPerSecond(),
+          pricing: pricing,
+          runner: DramaRunner(
+            store: store,
+            gateway: DashScopeDramaMediaGateway(cfg: cfg, pricing: pricing),
+          ),
+        );
+  }
 
   final PipelineConfig cfg;
   final Directory staticDir;
@@ -277,7 +286,7 @@ class PipelineServer {
   /// 设置页密钥存储；null → 设置 API 只读，PUT 返回 501。
   final SecretStore? secretStore;
 
-  final DramaController _drama;
+  late final DramaController _drama;
   final SettingsController _settings;
 
   final Map<String, RunRecord> _runs;

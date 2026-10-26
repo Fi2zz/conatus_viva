@@ -8,6 +8,8 @@ import '../render_plan.dart';
 import '../storyboard.dart';
 import 'episode.dart';
 import 'hash.dart';
+import 'hashes.dart';
+import 'plan_view.dart';
 import 'series.dart';
 import 'state.dart';
 
@@ -31,6 +33,15 @@ const Set<DramaStep> kP1WiredSteps = <DramaStep>{
   DramaStep.split,
   DramaStep.story,
   DramaStep.board,
+};
+
+/// P2 已接线的工序（cast + frame）。
+const Set<DramaStep> kDramaWiredSteps = <DramaStep>{
+  DramaStep.split,
+  DramaStep.story,
+  DramaStep.cast,
+  DramaStep.board,
+  DramaStep.frame,
 };
 
 /// `DramaStep` → wire key。
@@ -92,6 +103,7 @@ List<DramaStepView> deriveDramaSteps({
 }) {
   final shots = storyboard?.shots ?? const <Shot>[];
   final hasBoard = shots.isNotEmpty;
+  final plan = planJson == null ? null : DramaPlanView(planJson);
 
   final referencedSpeakers = <String>{
     for (final shot in shots)
@@ -107,12 +119,86 @@ List<DramaStepView> deriveDramaSteps({
           shot.speaker!.trim().isNotEmpty)
         shot,
   ];
-  final doneClips = shots
-      .where((shot) => state.shots[shot.id]?.clip.status == DramaStatus.succeeded)
-      .length;
   final doneAudio = lineShots
       .where((shot) => state.shots[shot.id]?.audio.status == DramaStatus.succeeded)
       .length;
+
+  const castSize = '1K';
+  final castModel = series.defaults.castImageModel;
+  final castHashes = <String, String>{
+    for (final id in referencedSpeakers)
+      if (series.cast[id] != null)
+        id: dramaCastHash(
+          member: series.cast[id]!,
+          model: castModel,
+          size: castSize,
+        ),
+  };
+  final castStale = referencedSpeakers.any((id) {
+    final avatar = series.cast[id]?.avatar;
+    return avatar != null &&
+        avatar.approved &&
+        castHashes[id] != null &&
+        avatar.sourceHash != castHashes[id];
+  });
+  final castCost = referencedSpeakers.fold<double>(
+    0,
+    (sum, id) => sum + (series.cast[id]?.avatar?.costYuan ?? 0),
+  );
+
+  final frameModel = series.defaults.frameImageModel;
+  final clipModel = series.defaults.clipVideoModel;
+  final resolution = series.defaults.resolution;
+  var doneClips = 0;
+  var frameStale = false;
+  var frameCost = 0.0;
+  if (plan != null) {
+    for (final shot in shots) {
+      final avatar = shot.speaker == null
+          ? null
+          : series.cast[shot.speaker]?.avatar;
+      final avatarHash = avatar != null && avatar.approved
+          ? avatar.sourceHash
+          : null;
+      final frameHash = dramaFrameHash(
+        shot: shot,
+        castAvatarHash: avatarHash,
+        model: frameModel,
+        size: castSize,
+      );
+      final route = plan.routeFor(shot.id);
+      final i2vSeconds = route == ShotRoute.i2v
+          ? plan.i2vSecondsFor(shot.id)
+          : 0;
+      final clipHash = dramaClipHash(
+        shot: shot,
+        frameHash: frameHash,
+        route: route.name,
+        model: route == ShotRoute.i2v ? clipModel : 'ffmpeg',
+        resolution: resolution,
+        i2vSeconds: i2vSeconds,
+      );
+      final shotState = state.shots[shot.id];
+      final frameArtifact = shotState?.frame;
+      final clipArtifact = shotState?.clip;
+      if (frameArtifact != null &&
+          frameArtifact.status == DramaStatus.succeeded &&
+          frameArtifact.sourceHash != frameHash) {
+        frameStale = true;
+      }
+      if (clipArtifact != null &&
+          clipArtifact.status == DramaStatus.succeeded &&
+          clipArtifact.sourceHash != clipHash) {
+        frameStale = true;
+      }
+      if (clipArtifact != null &&
+          clipArtifact.status == DramaStatus.succeeded &&
+          clipArtifact.sourceHash == clipHash) {
+        doneClips += 1;
+      }
+      frameCost += (frameArtifact?.costYuan ?? 0) + (clipArtifact?.costYuan ?? 0);
+    }
+  }
 
   DramaStatus derived(DramaStep step) {
     switch (step) {
@@ -130,6 +216,8 @@ List<DramaStepView> deriveDramaSteps({
             : DramaStatus.pending;
       case DramaStep.cast:
         if (!hasBoard) return DramaStatus.pending;
+        if (referencedSpeakers.isEmpty) return DramaStatus.succeeded;
+        if (castStale) return DramaStatus.stale;
         return approvedCast == referencedSpeakers.length
             ? DramaStatus.succeeded
             : DramaStatus.pending;
@@ -139,8 +227,10 @@ List<DramaStepView> deriveDramaSteps({
             ? DramaStatus.succeeded
             : DramaStatus.pending;
       case DramaStep.frame:
-        if (!hasBoard) return DramaStatus.pending;
-        return doneClips == shots.length ? DramaStatus.succeeded : DramaStatus.pending;
+        if (!hasBoard || plan == null) return DramaStatus.pending;
+        if (doneClips == shots.length) return DramaStatus.succeeded;
+        if (frameStale) return DramaStatus.stale;
+        return DramaStatus.pending;
       case DramaStep.voice:
         if (!hasBoard) return DramaStatus.pending;
         if (lineShots.isEmpty) return DramaStatus.skipped;
@@ -188,7 +278,11 @@ List<DramaStepView> deriveDramaSteps({
       DramaStepView(
         key: step,
         status: effective(step),
-        costYuan: 0,
+        costYuan: switch (step) {
+          DramaStep.cast => castCost,
+          DramaStep.frame => frameCost,
+          _ => 0.0,
+        },
         summary: summary(step),
         detail: state.steps[dramaStepKey(step)]?.error ?? '',
         wired: wired.contains(step),

@@ -1,5 +1,6 @@
 import 'package:flutter_wanxiang/pipeline/drama/episode.dart';
 import 'package:flutter_wanxiang/pipeline/drama/hash.dart';
+import 'package:flutter_wanxiang/pipeline/drama/hashes.dart';
 import 'package:flutter_wanxiang/pipeline/drama/series.dart';
 import 'package:flutter_wanxiang/pipeline/drama/state.dart';
 import 'package:flutter_wanxiang/pipeline/drama/steps.dart';
@@ -146,5 +147,104 @@ void main() {
     );
     expect(run.logs, hasLength(200));
     expect(run.logs.first, 'line 50');
+  });
+
+  test('cast is stale when the approved avatar hash is out of date', () {
+    final s = series();
+    final b = board();
+    final episode = DramaEpisode.create(series: s, episodeId: 'ep07', title: 'x');
+    final steps = deriveDramaSteps(
+      series: s,
+      episode: episode,
+      storyboard: b,
+      planJson: null,
+      state: DramaEpisodeState.empty('jietiao', 'ep07'),
+      wired: kDramaWiredSteps,
+    );
+    expect(find(steps, DramaStep.cast).status, DramaStatus.stale);
+    expect(find(steps, DramaStep.cast).costYuan, 0.5);
+    expect(find(steps, DramaStep.cast).wired, isTrue);
+  });
+
+  test('frame is succeeded with current hashes and stale after visual change', () {
+    final s = series();
+    final b = board();
+    final episode = DramaEpisode.create(series: s, episodeId: 'ep07', title: 'x');
+    final shot = b.shots.single;
+    final avatarHash = s.cast['erniu']!.avatar!.sourceHash;
+    final frameHash = dramaFrameHash(
+      shot: shot,
+      castAvatarHash: avatarHash,
+      model: 'wan2.7-image',
+      size: '1K',
+    );
+    final clipHash = dramaClipHash(
+      shot: shot,
+      frameHash: frameHash,
+      route: 'i2v',
+      model: 'wan2.6-i2v-flash',
+      resolution: '720P',
+      i2vSeconds: 3,
+    );
+    final plan = <String, Object?>{
+      'shots': <Object?>[
+        <String, Object?>{
+          'shot_id': 's01',
+          'route': 'i2v',
+          'i2v_seconds': 3,
+          'duration_s': 3.2,
+        },
+      ],
+    };
+    final state = DramaEpisodeState.empty('jietiao', 'ep07').withShot(
+      's01',
+      DramaShotState(
+        frame: DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: 'assets/frames/s01/$frameHash/image-01.png',
+          sourceHash: frameHash,
+          costYuan: 0.2,
+        ),
+        clip: DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: 'assets/clips/s01/$clipHash.mp4',
+          sourceHash: clipHash,
+          costYuan: 0.45,
+        ),
+      ),
+    );
+    final fresh = deriveDramaSteps(
+      series: s,
+      episode: episode,
+      storyboard: b,
+      planJson: plan,
+      state: state,
+      wired: kDramaWiredSteps,
+    );
+    expect(find(fresh, DramaStep.frame).status, DramaStatus.succeeded);
+    expect(find(fresh, DramaStep.frame).costYuan, closeTo(0.65, 0.001));
+
+    final changed = Storyboard.fromJson(<String, Object?>{
+      'content_id': 'ep07',
+      'cast': <String, Object?>{'erniu': <String, Object?>{'name': '二舅'}},
+      'shots': <Object?>[
+        <String, Object?>{
+          'id': 's01',
+          'kind': 'speak_off',
+          'speaker': 'erniu',
+          'line': '还钱。',
+          'visual': '新画面',
+        },
+      ],
+    });
+    final stale = deriveDramaSteps(
+      series: s,
+      episode: episode,
+      storyboard: changed,
+      planJson: plan,
+      state: state,
+      wired: kDramaWiredSteps,
+    );
+    expect(find(stale, DramaStep.frame).status, DramaStatus.stale);
   });
 }
