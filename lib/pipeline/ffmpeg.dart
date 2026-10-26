@@ -99,16 +99,29 @@ List<String> kenBurnsArgs({
   required File img,
   required int durationS,
   required File out,
+}) => kenBurnsArgsFor(img: img, durationS: durationS, out: out);
+
+/// 参数化 Ken Burns；短剧竖屏显式传 1080×1920。
+List<String> kenBurnsArgsFor({
+  required File img,
+  required int durationS,
+  required File out,
+  int width = 1280,
+  int height = 720,
+  int fps = 24,
+  double zoomStep = 0.0015,
+  double maxZoom = 1.5,
 }) {
-  final frames = durationS * 24;
-  return [
+  final frames = durationS * fps;
+  return <String>[
     '-y',
     '-i',
     img.path,
     '-vf',
-    "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,"
-        "zoompan=z='min(zoom+0.0015,1.5)':d=$frames:"
-        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720:fps=24",
+    'scale=$width:$height:force_original_aspect_ratio=increase,'
+        'crop=$width:$height,'
+        "zoompan=z='min(zoom+$zoomStep,$maxZoom)':d=$frames:"
+        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x$height:fps=$fps",
     '-t',
     '$durationS',
     '-c:v',
@@ -119,14 +132,43 @@ List<String> kenBurnsArgs({
   ];
 }
 
+/// 微动：更小的缩放幅度，仍走本地 ffmpeg、零费用。
+List<String> microArgsFor({
+  required File img,
+  required int durationS,
+  required File out,
+  int width = 1280,
+  int height = 720,
+  int fps = 24,
+}) => kenBurnsArgsFor(
+  img: img,
+  durationS: durationS,
+  out: out,
+  width: width,
+  height: height,
+  fps: fps,
+  zoomStep: 0.0006,
+  maxZoom: 1.08,
+);
+
 /// Normalize [input] to the uniform segment format: scale+pad to 1280x720
 /// (aspect preserved, letterboxed), 24 fps h264, plus a silent stereo aac
 /// track (`anullsrc`) so every normalized clip carries the same stream
 /// layout and stays silent regardless of the source. `-shortest` bounds
 /// the output to the video length.
 // `in` (brief) is a Dart reserved word — `input` is the same contract.
-List<String> normalizeArgs({required File input, required File out}) {
-  return [
+List<String> normalizeArgs({required File input, required File out}) =>
+    normalizeArgsFor(input: input, out: out);
+
+/// 参数化归一化；短剧竖屏显式传 1080×1920。
+List<String> normalizeArgsFor({
+  required File input,
+  required File out,
+  int width = 1280,
+  int height = 720,
+  int fps = 24,
+}) {
+  return <String>[
     '-y',
     '-i',
     input.path,
@@ -139,8 +181,8 @@ List<String> normalizeArgs({required File input, required File out}) {
     '-map',
     '1:a:0',
     '-vf',
-    'scale=1280:720:force_original_aspect_ratio=decrease,'
-        'pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=24',
+    'scale=$width:$height:force_original_aspect_ratio=decrease,'
+        'pad=$width:$height:(ow-iw)/2:(oh-ih)/2,fps=$fps',
     '-c:v',
     'libx264',
     '-pix_fmt',

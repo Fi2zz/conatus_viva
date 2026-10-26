@@ -197,6 +197,46 @@ void main() {
       expect(args.last, '/tmp/norm.mp4');
     });
 
+    test('kenBurnsArgsFor emits 1080x1920/24fps and keeps duration', () {
+      final args = kenBurnsArgsFor(
+        img: File('/tmp/in.png'),
+        durationS: 3,
+        out: File('/tmp/vertical.mp4'),
+        width: 1080,
+        height: 1920,
+      );
+      final joined = args.join(' ');
+      expect(joined, contains('scale=1080:1920'));
+      expect(joined, contains('s=1080x1920'));
+      expect(joined, contains('fps=24'));
+      expect(joined, contains('d=${3 * 24}'));
+    });
+
+    test('microArgsFor uses a gentler zoom than kenburns', () {
+      final args = microArgsFor(
+        img: File('/tmp/in.png'),
+        durationS: 3,
+        out: File('/tmp/micro.mp4'),
+        width: 1080,
+        height: 1920,
+      );
+      final joined = args.join(' ');
+      expect(joined, contains('1.08'));
+      expect(joined, contains('scale=1080:1920'));
+    });
+
+    test('normalizeArgsFor emits 1080x1920', () {
+      final args = normalizeArgsFor(
+        input: File('/tmp/in.mp4'),
+        out: File('/tmp/vertical-norm.mp4'),
+        width: 1080,
+        height: 1920,
+      );
+      final joined = args.join(' ');
+      expect(joined, contains('scale=1080:1920'));
+      expect(joined, contains('pad=1080:1920'));
+    });
+
     test('muxArgs trims and pads audio to clip duration', () {
       final shortAudio = muxArgs(
         video: File('/tmp/v.mp4'),
@@ -300,6 +340,43 @@ void main() {
       expect(codecs, contains('h264'));
       expect(codecs, contains('aac'));
       expect(await meanVolumeDb(out), lessThan(-50)); // 保持无声
+    });
+
+    test('kenBurnsArgsFor output is a 2s 1080x1920/24fps clip', () async {
+      final img = await makeImage('vertical-src.png');
+      final out = File('${tmp.path}/vertical.mp4');
+      await runFfmpeg(
+        kenBurnsArgsFor(
+          img: img,
+          durationS: 2,
+          out: out,
+          width: 1080,
+          height: 1920,
+        ),
+      );
+      expect(await mediaDurationSeconds(out), closeTo(2.0, 0.1));
+      final v = await probeVideo(out);
+      expect(v[0], '1080');
+      expect(v[1], '1920');
+      expect(v[2], '24/1');
+    });
+
+    test('normalizeArgsFor output is 1080x1920 with silent aac', () async {
+      final clip = await makeClip('vertical-norm-src.mp4');
+      final out = File('${tmp.path}/vertical-norm.mp4');
+      await runFfmpeg(
+        normalizeArgsFor(
+          input: clip,
+          out: out,
+          width: 1080,
+          height: 1920,
+        ),
+      );
+      expect(await mediaDurationSeconds(out), closeTo(3.0, 0.1));
+      final v = await probeVideo(out);
+      expect(v[0], '1080');
+      expect(v[1], '1920');
+      expect(v[2], '24/1');
     });
 
     test('muxArgs output is clip-length with trimmed+padded audio', () async {
