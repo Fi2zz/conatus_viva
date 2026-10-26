@@ -41,3 +41,12 @@
 - 空态与未接入 voice/edit/pack 不显示假进度。
 - 已知边界：本轮未在 GUI 里逐项点击全部按钮；真实 smoke 覆盖了后端真实链路，UI 交互以 vitest/SSR 为准。
 
+## 评审修复
+
+- 降级 `degrade:true` 现在按本地 kenburns 估算（0 元），并识别已降级 clip 为当前产物，不再误报 stale。
+- 只有 `target != frame` 才要求计划单；无计划也可以生成首帧。
+- `priceYuanPerSecond` 改用配置解析后的 `pricing.i2vYuanPerSecond`，计划单与估算一致。
+- `runs/<id>` 读取/取消校验 series/episode 归属，跨集访问 404。
+- Inspector 显示中文产物状态、hash 短码与错误；运行失败时面板显示 `run.error || run.error`。
+- 设置按钮上移到右下角底部栏上方，避免遮挡「导出 / 投放包」。
+
