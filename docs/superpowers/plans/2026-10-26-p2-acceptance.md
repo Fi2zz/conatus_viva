@@ -9,7 +9,7 @@
 | 命令 | 结果 |
 |---|---|
 | `make analyze` | No issues found |
-| `make test-dart` | 402 tests passed |
+| `make test-dart` | 404 tests passed |
 | `make test-web` | vitest 62 passed / oxlint / check:dialogs 全绿 |
 | `cd frontend && npm run build` | 构建成功 |
 | `make web` | `web_build/` 与源码一致 |
@@ -53,4 +53,13 @@
 - `failed / interrupted` 工序状态不再遮蔽已推导成功的状态；推导仍为 pending 时才显示失败。
 - P2.5：`establishing` 定场镜头自动走 t2v，不生成首帧；t2v 按配置单价计入总预算，失败不自动重试。
 - 真实 t2v smoke：`RUN_REAL_T2V=1` 通过，估算 ¥0.84 / 实际 ¥0.84（1 条 2 秒 establishing 镜头）。
+
+## P3-1 声音先行（追加）
+
+- 逐句 TTS：`VoiceRunner` 写入 `assets/audio/<shot>/<hash>.wav`，ffprobe 实测时长写入 `state.shots[].audio.duration_s`。
+- 音频先行回写：`POST .../audio:reconcile` 先预览 `changes`，`apply:true` 才改 `storyboard.json`、重算计划单；已有片段因 hash 变化显示 `stale`，不静默重跑。
+- 缺 `voice_id` 时回退到配置的 fallback 音色并记录日志；方言 instruction 来自 `episode.settings.dialect`。
+- 费用闸门：TTS 单价未进目录，`estimate` 返回 `tts_pricing_unavailable`，必须勾选「按实际账单」。
+- 测试：`cost_test` 的 voice unpriced、`runner_test` 的配音/缓存、`drama_run_api_test` 的 voice run + reconcile。
+- 真实配音 smoke：`RUN_REAL_VOICE=1` 通过，1 句河南话实测 **2.16s**；TTS 费用按实际账单（目录未定价）。
 
