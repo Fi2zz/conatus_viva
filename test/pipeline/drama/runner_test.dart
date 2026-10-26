@@ -326,4 +326,39 @@ void main() {
     expect(gateway.clipCalls, 0);
     expect(gateway.localCalls, 1);
   });
+
+  test('t2v plan skips the frame and calls t2v', () async {
+    store.writeStoryboard('jietiao', 'ep07', multiBoard());
+    store.writePlanJson('jietiao', 'ep07', <String, Object?>{
+      'shots': <Object?>[
+        <String, Object?>{
+          'shot_id': 's01',
+          'route': 'i2v',
+          'i2v_seconds': 3,
+          'duration_s': 3.2,
+        },
+        <String, Object?>{
+          'shot_id': 's02',
+          'route': 't2v',
+          'i2v_seconds': 0,
+          'duration_s': 2,
+        },
+      ],
+    });
+    final gateway = FakeDramaMediaGateway();
+    final r = runner(gateway);
+    final run = await r.startStep(
+      seriesId: 'jietiao',
+      episodeId: 'ep07',
+      step: DramaStep.frame,
+    );
+    await run.done;
+    expect(run.status, DramaRunStatus.completed);
+    expect(gateway.imageCalls, 1);
+    expect(gateway.t2vCalls, 1);
+    expect(gateway.clipCalls, 1);
+    final state = store.readState('jietiao', 'ep07');
+    expect(state.shots['s02']!.frame.status, DramaStatus.pending);
+    expect(state.shots['s02']!.clip.status, DramaStatus.succeeded);
+  });
 }

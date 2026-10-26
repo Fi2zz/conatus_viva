@@ -233,6 +233,10 @@ class PipelineServer {
             llm: dramaLlm ?? QwenDramaLlm(cfg: cfg),
           ),
           priceYuanPerSecond: pricing.i2vYuanPerSecond,
+          t2vPriceYuanPerSecond: pricing.videoPrice(
+            cfg.t2vModel,
+            cfg.t2vResolution,
+          ),
           pricing: pricing,
           runner: DramaRunner(
             store: store,

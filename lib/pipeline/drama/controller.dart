@@ -125,14 +125,18 @@ class DramaController {
     required this.store,
     required this.drafts,
     required this.priceYuanPerSecond,
+    double? t2vPriceYuanPerSecond,
     DramaPricing? pricing,
     this.runner,
     this.maxBodyBytes = 2 * 1024 * 1024,
-  }) : pricing = pricing ?? DramaPricing.catalog();
+  }) : t2vPriceYuanPerSecond =
+           t2vPriceYuanPerSecond ?? defaultDramaT2vPriceYuanPerSecond(),
+       pricing = pricing ?? DramaPricing.catalog();
 
   final DramaStore store;
   final DramaDraftService drafts;
   final double priceYuanPerSecond;
+  final double t2vPriceYuanPerSecond;
   final DramaPricing pricing;
   final DramaRunner? runner;
   final int maxBodyBytes;
@@ -789,6 +793,7 @@ class DramaController {
       storyboard: board,
       episode: episode,
       priceYuanPerSecond: priceYuanPerSecond,
+      t2vPriceYuanPerSecond: t2vPriceYuanPerSecond,
     );
     store.writePlanJson(seriesId, episodeId, plan.toJson());
     final state = store

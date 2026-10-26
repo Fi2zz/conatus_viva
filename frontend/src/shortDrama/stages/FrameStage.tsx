@@ -112,9 +112,11 @@ export default function FrameStage({
     }
   };
 
+  const plannedRoute = (shot: StoryboardShot) =>
+    bundle.plan?.shots.find((item) => item.shot_id === shot.id)?.route ?? null;
   const planRoute = (shot: StoryboardShot): string => {
-    const planned = bundle.plan?.shots.find((item) => item.shot_id === shot.id);
-    return planned ? routeLabel(planned.route) : "未生成计划";
+    const route = plannedRoute(shot);
+    return route === null ? "未生成计划" : routeLabel(route);
   };
 
   const asset = (path: string | null | undefined): string | null =>
@@ -226,6 +228,7 @@ export default function FrameStage({
             const shotState = bundle.state.shots[shot.id];
             const frame = shotState?.frame;
             const clip = shotState?.clip;
+            const isT2v = plannedRoute(shot) === "t2v";
             return (
               <button
                 type="button"
@@ -240,7 +243,9 @@ export default function FrameStage({
                     alt={shot.id}
                   />
                 ) : (
-                  <div className="sd-shot-thumb empty">无首帧</div>
+                  <div className="sd-shot-thumb empty">
+                    {isT2v ? "t2v" : "无首帧"}
+                  </div>
                 )}
                 <b>{shot.id}</b>
                 <span>{frame ? statusOf(frame) : "未生成"}</span>
@@ -262,21 +267,23 @@ export default function FrameStage({
             {statusOf(selectedState?.clip)}
           </p>
           <div className="sd-actions">
-            <button
-              type="button"
-              className="sd-btn"
-              disabled={run.busy}
-              onClick={() =>
-                void ask({
-                  shotId: selected.id,
-                  target: "frame",
-                  force: false,
-                  degrade: false,
-                })
-              }
-            >
-              生成首帧
-            </button>
+            {plannedRoute(selected) !== "t2v" && (
+              <button
+                type="button"
+                className="sd-btn"
+                disabled={run.busy}
+                onClick={() =>
+                  void ask({
+                    shotId: selected.id,
+                    target: "frame",
+                    force: false,
+                    degrade: false,
+                  })
+                }
+              >
+                生成首帧
+              </button>
+            )}
             <button
               type="button"
               className="sd-btn"

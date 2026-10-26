@@ -170,11 +170,14 @@ List<DramaStepView> deriveDramaSteps({
       final i2vSeconds = route == ShotRoute.i2v
           ? plan.i2vSecondsFor(shot.id)
           : 0;
+      final t2vModel = series.defaults.t2vModel;
       final clipHash = dramaClipHash(
         shot: shot,
         frameHash: frameHash,
         route: route.name,
-        model: route == ShotRoute.i2v ? clipModel : 'ffmpeg',
+        model: route == ShotRoute.i2v
+            ? clipModel
+            : (route == ShotRoute.t2v ? t2vModel : 'ffmpeg'),
         resolution: resolution,
         i2vSeconds: i2vSeconds,
       );
@@ -191,7 +194,8 @@ List<DramaStepView> deriveDramaSteps({
       final shotState = state.shots[shot.id];
       final frameArtifact = shotState?.frame;
       final clipArtifact = shotState?.clip;
-      if (frameArtifact != null &&
+      if (route != ShotRoute.t2v &&
+          frameArtifact != null &&
           frameArtifact.status == DramaStatus.succeeded &&
           frameArtifact.sourceHash != frameHash) {
         frameStale = true;

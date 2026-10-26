@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../bailian/i2v.dart';
 import '../bailian/image_client.dart';
+import '../bailian/wan30_video.dart';
 import '../bailian/uploader.dart';
 import '../config.dart';
 import '../errors.dart';
@@ -49,6 +50,15 @@ abstract interface class DramaMediaGateway {
     required String model,
     required String resolution,
     required File firstFrame,
+    required String prompt,
+    required int durationS,
+    required File outFile,
+    required void Function(String) onLog,
+  });
+
+  Future<DramaMediaResult> generateT2vClip({
+    required String model,
+    required String resolution,
     required String prompt,
     required int durationS,
     required File outFile,
@@ -199,6 +209,63 @@ class DashScopeDramaMediaGateway implements DramaMediaGateway {
     final bytes = await videoClient.downloadClip(url);
     _writeBytes(outFile, bytes);
     onLog('片段已下载：${outFile.path}');
+    return DramaMediaResult(
+      path: outFile.path,
+      costYuan: durationS * pricing.videoPrice(model, resolution),
+      model: model,
+      durationS: durationS.toDouble(),
+    );
+  }
+
+  @override
+  Future<DramaMediaResult> generateT2vClip({
+    required String model,
+    required String resolution,
+    required String prompt,
+    required int durationS,
+    required File outFile,
+    required void Function(String) onLog,
+  }) async {
+    final apiKey = cfg.requireApiKey();
+    final videoClient = Wan30VideoClient(
+      apiKey: apiKey,
+      client: client,
+      host: cfg.apiHost,
+      model: model,
+      resolution: resolution,
+      watermark: cfg.t2vWatermark,
+      seed: cfg.t2vSeed,
+      audio: false,
+    );
+    onLog('提交文生视频任务（${durationS}s）…');
+    var task = await videoClient.submitTextToVideo(
+      prompt: prompt,
+      durationS: durationS,
+    );
+    final deadline = _now().add(Duration(minutes: cfg.t2vMaxWaitMinutes));
+    while (task.status == I2vStatus.running) {
+      if (_now().isAfter(deadline)) {
+        throw PipelineError(
+          ErrorClass.fatal,
+          't2v 超时（${cfg.t2vMaxWaitMinutes} 分钟）',
+        );
+      }
+      await _sleep(Duration(seconds: cfg.t2vPollSeconds));
+      task = await videoClient.poll(task.taskId);
+    }
+    if (task.status == I2vStatus.failed) {
+      throw PipelineError(
+        ErrorClass.fatal,
+        't2v 失败：${task.errorCode ?? 'unknown'}',
+      );
+    }
+    final url = task.videoUrl;
+    if (url == null) {
+      throw PipelineError(ErrorClass.fatal, 't2v 成功但没有视频地址');
+    }
+    final bytes = await videoClient.downloadClip(url);
+    _writeBytes(outFile, bytes);
+    onLog('t2v 片段已下载：${outFile.path}');
     return DramaMediaResult(
       path: outFile.path,
       costYuan: durationS * pricing.videoPrice(model, resolution),

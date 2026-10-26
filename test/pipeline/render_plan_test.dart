@@ -200,7 +200,7 @@ void main() {
       expect(p.totals.i2vSeconds, 13);
       expect(p.totals.estimatedYuan, 1.95);
       expect(p.totals.remainingYuan, 18.05);
-      expect(p.counts, {'kenburns': 6, 'micro': 1, 'i2v': 5});
+      expect(p.counts, {'kenburns': 6, 'micro': 1, 'i2v': 5, 't2v': 0});
       // 输出按故事板顺序；这里只断言分配到的镜头集合（排序只用于分配）。
       expect(
         i2vIds(p),
@@ -218,7 +218,7 @@ void main() {
       expect(p.totals.i2vSeconds, 10);
       expect(p.totals.estimatedYuan, 1.50);
       expect(p.totals.remainingYuan, 0.0);
-      expect(p.counts, {'kenburns': 6, 'micro': 2, 'i2v': 4});
+      expect(p.counts, {'kenburns': 6, 'micro': 2, 'i2v': 4, 't2v': 0});
       final s04 = p.shots.firstWhere((s) => s.shotId == 's04');
       expect(s04.route, ShotRoute.micro);
       expect(s04.downgradeReason, 'budget_insufficient');
@@ -241,7 +241,7 @@ void main() {
         budgetYuan: 0.2,
       );
       expect(p.totals.i2vSeconds, 0);
-      expect(p.counts, {'kenburns': 6, 'micro': 6, 'i2v': 0});
+      expect(p.counts, {'kenburns': 6, 'micro': 6, 'i2v': 0, 't2v': 0});
       expect(p.warnings, contains('no_i2v_budget'));
     });
 
@@ -265,7 +265,7 @@ void main() {
       expect(i2vIds(p), ['s07']);
       expect(p.totals.i2vSeconds, 3);
       expect(p.totals.estimatedYuan, 0.45);
-      expect(p.counts, {'kenburns': 6, 'micro': 5, 'i2v': 1});
+      expect(p.counts, {'kenburns': 6, 'micro': 5, 'i2v': 1, 't2v': 0});
     });
   });
 
@@ -337,6 +337,7 @@ void main() {
         'i2v_seconds': 13,
         'estimated_yuan': 1.95,
         'remaining_yuan': 18.05,
+        'total_remaining_yuan': 18.05,
       });
       expect(json['counts'], {'kenburns': 6, 'micro': 1, 'i2v': 5});
       expect(json['warnings'], <String>[]);
@@ -532,6 +533,36 @@ void main() {
           maxI2vSeconds: -1,
         ),
         throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('t2v routes establishing shots at the configured price', () {
+      final board = Storyboard.fromJson(<String, Object?>{
+        'content_id': 't2v',
+        'shots': <Object?>[
+          <String, Object?>{
+            'id': 's01',
+            'kind': 'establishing',
+            'line': '',
+            'duration_s': 3,
+            'priority': 'normal',
+          },
+        ],
+      });
+      final p = buildRenderPlan(
+        storyboard: board,
+        priceYuanPerSecond: 0.15,
+        t2vPriceYuanPerSecond: 0.42,
+        totalBudgetYuan: 120,
+      );
+      final establishing = p.shots.where((s) => s.kind == ShotKind.establishing);
+      expect(establishing, isNotEmpty);
+      expect(establishing.every((s) => s.route == ShotRoute.t2v), isTrue);
+      expect(establishing.every((s) => s.costYuan > 0), isTrue);
+      expect(p.counts['t2v'], establishing.length);
+      expect(
+        p.totals.totalRemainingYuan,
+        closeTo(120 - p.totals.estimatedYuan, 0.01),
       );
     });
   });

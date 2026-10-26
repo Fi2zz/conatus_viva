@@ -748,7 +748,7 @@ App
 - **estimate 请求**：只接受 `{step, cast_ids?, shot_ids?, target?, force?}`，`step ∈ story|storyboard|cast|frame`；旧的 `targets` 格式删除。
 - **P2 产物路径**：`cast/<cast_id>/<hash>/image-01.png`、`assets/frames/<shot_id>/<hash>/image-01.png`、`assets/clips/<shot_id>/<hash>.mp4`；hash 不一致即 `stale`。
 - **定妆采用**：生成后 `approved=false`；用户点「采用」写回 `series`，`cast` 工序才完成。
-- **P2 路由范围**：画面只消费计划单已有的 `i2v` / `kenburns` / `micro`；t2v 不新增自动路由，仍保留在通用工具。
+- **P2.5 路由范围**：`establishing` 定场镜头自动走 `t2v`（不生成首帧，按 `defaults.t2v_model` / `resolution` 计费，时长 2–10 秒）；`action`/`listen_face` 仍 i2v，`speak_off`/`insert` 仍本地。t2v 失败不自动重试；t2v 暂不出音频，音频留给 P3。
 - **预算**：总预算与 i2v 预算不足时，run 在任何付费调用前返回 409 `budget_exceeded`。
 - **验收**：先完成 P1 验收记录；P2 离线全绿后做一次小额真实跑（约 ¥0.85），需用户确认，不把密钥写入仓库或日志。
 

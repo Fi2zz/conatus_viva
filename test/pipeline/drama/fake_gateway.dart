@@ -23,6 +23,7 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
 
   int imageCalls = 0;
   int clipCalls = 0;
+  int t2vCalls = 0;
   int localCalls = 0;
   int? failImageCall;
   int? failClipCall;
@@ -81,6 +82,30 @@ class FakeDramaMediaGateway implements DramaMediaGateway {
     }
     if (failAllClips) {
       throw PipelineError(ErrorClass.fatal, 'fake clip failure');
+    }
+    outFile.parent.createSync(recursive: true);
+    outFile.writeAsBytesSync(<int>[4, 5, 6]);
+    return DramaMediaResult(
+      path: outFile.path,
+      costYuan: clipCost,
+      model: model,
+      durationS: durationS.toDouble(),
+    );
+  }
+
+  @override
+  Future<DramaMediaResult> generateT2vClip({
+    required String model,
+    required String resolution,
+    required String prompt,
+    required int durationS,
+    required File outFile,
+    required void Function(String) onLog,
+  }) async {
+    t2vCalls += 1;
+    if (missingKey) throw ConfigException('DASHSCOPE_API_KEY is not set');
+    if (failAllClips) {
+      throw PipelineError(ErrorClass.fatal, 'fake t2v failure');
     }
     outFile.parent.createSync(recursive: true);
     outFile.writeAsBytesSync(<int>[4, 5, 6]);

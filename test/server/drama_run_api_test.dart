@@ -192,13 +192,16 @@ void main() {
       port,
       'POST',
       '/api/drama/series/jietiao/episodes/ep07/steps/frame:run',
-      <String, Object?>{'target': 'frame'},
+      <String, Object?>{'target': 'all'},
     );
     expect(start.status, 202);
     final runId = (jsonDecode(start.body) as Map<String, dynamic>)['run_id'];
     final run = await _pollRun(port, runId as String);
     expect(run['status'], 'completed');
-    expect(run['items'] as List<Object?>, hasLength(2));
+    expect(
+      (run['items'] as List<Object?>).map((item) => (item as Map)['kind']),
+      containsAll(<String>['frame', 'clip', 't2v']),
+    );
 
     final bundle = await _send(
       port,
@@ -227,7 +230,12 @@ void main() {
     );
     expect(res.status, 200);
     final body = jsonDecode(res.body) as Map<String, dynamic>;
-    expect(body['items'] as List<Object?>, isNotEmpty);
+    final items = body['items'] as List<Object?>;
+    expect(items, isNotEmpty);
+    expect(
+      items.where((item) => (item as Map<String, dynamic>)['kind'] == 't2v'),
+      isNotEmpty,
+    );
     expect(body['i2v_estimated_yuan'], closeTo(0.45, 0.001));
     expect((body['budget'] as Map<String, dynamic>)['i2v_total_yuan'], 20);
   });

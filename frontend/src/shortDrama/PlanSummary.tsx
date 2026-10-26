@@ -53,10 +53,14 @@ export default function PlanSummary({
           <dd className="mono">{formatYuan(plan.totals.remaining_yuan)}</dd>
         </div>
         <div>
+          <dt>总预算剩余</dt>
+          <dd className="mono">{formatYuan(plan.totals.total_remaining_yuan ?? plan.totals.remaining_yuan)}</dd>
+        </div>
+        <div>
           <dt>路由</dt>
           <dd>
             静帧 {plan.counts.kenburns} · 微动 {plan.counts.micro} · i2v{" "}
-            {plan.counts.i2v}
+            {plan.counts.i2v} · t2v {plan.counts.t2v ?? 0}
           </dd>
         </div>
       </dl>
@@ -69,6 +73,9 @@ export default function PlanSummary({
         </span>
         <span>
           i2v <b>{formatYuan(routeCost.i2v)}</b>
+        </span>
+        <span>
+          t2v <b>{formatYuan(routeCost.t2v)}</b>
         </span>
       </div>
       <div className="sd-budget-line">

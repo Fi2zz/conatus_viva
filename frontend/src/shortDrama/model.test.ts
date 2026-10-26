@@ -75,19 +75,20 @@ describe('costByRoute', () => {
       shot({ shot_id: 'b', route: 'i2v', cost_yuan: 1.0 }),
       shot({ shot_id: 'c', route: 'i2v', cost_yuan: 1.25 }),
     ]
-    expect(costByRoute(shots)).toEqual({ kenburns: 0.5, micro: 0, i2v: 2.25 })
+    expect(costByRoute(shots)).toEqual({ kenburns: 0.5, micro: 0, i2v: 2.25, t2v: 0 })
   })
 
   it('returns all three keys with zero defaults for empty input', () => {
-    expect(costByRoute([])).toEqual({ kenburns: 0, micro: 0, i2v: 0 })
+    expect(costByRoute([])).toEqual({ kenburns: 0, micro: 0, i2v: 0, t2v: 0 })
   })
 })
 
 describe('routeLabel', () => {
-  it('maps the three routes to Chinese labels', () => {
+  it('maps every route to a Chinese label', () => {
     expect(routeLabel('kenburns')).toBe('静帧推拉')
     expect(routeLabel('micro')).toBe('局部微动')
     expect(routeLabel('i2v')).toBe('图生视频')
+    expect(routeLabel('t2v')).toBe('文生视频')
   })
 })
 

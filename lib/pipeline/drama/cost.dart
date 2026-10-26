@@ -28,17 +28,31 @@ double defaultDramaI2vPriceYuanPerSecond() {
   return price;
 }
 
+/// 计划单 t2v 单价；目录缺失直接抛错，不静默回退。
+double defaultDramaT2vPriceYuanPerSecond() {
+  final model = findVideoModel('wan3.0-video');
+  final price = model?.defaultPrices['720P'];
+  if (price == null) {
+    throw StateError('视频目录缺少 wan3.0-video / 720P 的价格');
+  }
+  return price;
+}
+
 /// 按本集设置构建确定性计划单。
 RenderPlan buildDramaPlan({
   required Storyboard storyboard,
   required DramaEpisode episode,
   double? priceYuanPerSecond,
+  double? t2vPriceYuanPerSecond,
 }) => buildRenderPlan(
   storyboard: storyboard,
   priceYuanPerSecond:
       priceYuanPerSecond ?? defaultDramaI2vPriceYuanPerSecond(),
   budgetYuan: episode.settings.i2vBudgetYuan,
   maxI2vSeconds: episode.settings.maxI2vSeconds,
+  t2vPriceYuanPerSecond:
+      t2vPriceYuanPerSecond ?? defaultDramaT2vPriceYuanPerSecond(),
+  totalBudgetYuan: episode.settings.totalBudgetYuan,
 );
 
 /// 一个可估价项。
@@ -370,16 +384,22 @@ void _estimateFrame({
       model: frameModel,
       size: size,
     );
-    final frameCached = _frameCached(
-      store: store,
-      state: state,
-      seriesId: series.seriesId,
-      episodeId: episode.episodeId,
-      shotId: shot.id,
-      hash: frameHash,
-    );
+    final route = request.degrade
+        ? ShotRoute.kenburns
+        : (plan == null ? ShotRoute.micro : plan.routeFor(shot.id));
+    final isT2v = route == ShotRoute.t2v;
+    final frameCached = isT2v
+        ? true
+        : _frameCached(
+            store: store,
+            state: state,
+            seriesId: series.seriesId,
+            episodeId: episode.episodeId,
+            shotId: shot.id,
+            hash: frameHash,
+          );
     final needFrame = !frameCached || (request.force && wantFrame);
-    if ((wantFrame && needFrame) || (wantClip && !frameCached)) {
+    if (!isT2v && ((wantFrame && needFrame) || (wantClip && !frameCached))) {
       items.add(
         DramaEstimateItem(
           kind: 'image',
@@ -394,9 +414,43 @@ void _estimateFrame({
       );
     }
     if (!wantClip) continue;
-    final route = request.degrade
-        ? ShotRoute.kenburns
-        : plan!.routeFor(shot.id);
+    if (route == ShotRoute.t2v) {
+      final t2vModel = series.defaults.t2vModel;
+      final duration = plan!.durationFor(shot.id).ceil().clamp(2, 10);
+      final clipHash = dramaClipHash(
+        shot: shot,
+        frameHash: frameHash,
+        route: route.name,
+        model: t2vModel,
+        resolution: resolution,
+        i2vSeconds: 0,
+      );
+      if (!request.force &&
+          _clipCached(
+            store: store,
+            state: state,
+            seriesId: series.seriesId,
+            episodeId: episode.episodeId,
+            shotId: shot.id,
+            hash: clipHash,
+          )) {
+        continue;
+      }
+      final price = pricing.videoPrice(t2vModel, resolution);
+      items.add(
+        DramaEstimateItem(
+          kind: 't2v',
+          id: shot.id,
+          model: t2vModel,
+          quantity: duration.toDouble(),
+          unit: 'second',
+          priceYuan: price,
+          subtotalYuan: price * duration,
+          estimated: true,
+        ),
+      );
+      continue;
+    }
     final i2vSeconds = route == ShotRoute.i2v
         ? plan!.i2vSecondsFor(shot.id)
         : 0;

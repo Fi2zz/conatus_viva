@@ -401,16 +401,22 @@ class DramaRunner {
         size: size,
       );
       var shotState = currentState.shots[shot.id] ?? const DramaShotState();
-      final frameCached = _frameCached(
-        seriesId: run.seriesId,
-        episodeId: run.episodeId,
-        shotId: shot.id,
-        hash: frameHash,
-        state: currentState,
-      );
+      final route = plan == null
+          ? ShotRoute.micro
+          : (degrade ? ShotRoute.kenburns : plan.routeFor(shot.id));
+      final isT2v = route == ShotRoute.t2v;
+      final frameCached = isT2v
+          ? true
+          : _frameCached(
+              seriesId: run.seriesId,
+              episodeId: run.episodeId,
+              shotId: shot.id,
+              hash: frameHash,
+              state: currentState,
+            );
       final needFrame = !frameCached || (force && wantFrame);
 
-      if (needFrame) {
+      if (!isT2v && needFrame) {
         try {
           final refs = approved
               ? <File>[store.seriesAssetFile(series.seriesId, avatar.path)]
@@ -474,7 +480,7 @@ class DramaRunner {
           run.logs.add('首帧 ${shot.id} 失败：$e');
           continue;
         }
-      } else if (wantFrame) {
+      } else if (!isT2v && wantFrame) {
         run.items.add(
           DramaRunItem(
             id: shot.id,
@@ -488,19 +494,24 @@ class DramaRunner {
 
       if (!wantClip) continue;
       final frame = shotState.frame;
-      if (frame.status != DramaStatus.succeeded || frame.path == null) {
+      if (!isT2v &&
+          (frame.status != DramaStatus.succeeded || frame.path == null)) {
         continue;
       }
-      final route = degrade ? ShotRoute.kenburns : plan!.routeFor(shot.id);
       final rawSeconds = plan!.i2vSecondsFor(shot.id);
       final i2vSeconds = route == ShotRoute.i2v
           ? (rawSeconds < 2 ? 2 : rawSeconds)
+          : 0;
+      final t2vSeconds = route == ShotRoute.t2v
+          ? plan.durationFor(shot.id).ceil().clamp(2, 10)
           : 0;
       final clipHash = dramaClipHash(
         shot: shot,
         frameHash: frameHash,
         route: route.name,
-        model: route == ShotRoute.i2v ? clipModel : 'ffmpeg',
+        model: route == ShotRoute.i2v
+            ? clipModel
+            : (route == ShotRoute.t2v ? series.defaults.t2vModel : 'ffmpeg'),
         resolution: resolution,
         i2vSeconds: i2vSeconds,
       );
@@ -533,7 +544,9 @@ class DramaRunner {
         run.items.add(
           DramaRunItem(
             id: shot.id,
-            kind: route == ShotRoute.i2v ? 'clip' : 'local_clip',
+            kind: route == ShotRoute.i2v
+                ? 'clip'
+                : (route == ShotRoute.t2v ? 't2v' : 'local_clip'),
             status: DramaStatus.skipped,
             path: shotState.clip.path,
           ),
@@ -544,14 +557,33 @@ class DramaRunner {
       try {
         final relative = 'assets/clips/${shot.id}/$clipHash.mp4';
         final outFile = store.assetFile(run.seriesId, run.episodeId, relative);
-        final frameFile = store.assetFile(
-          run.seriesId,
-          run.episodeId,
-          frame.path!,
-        );
         DramaMediaResult result;
-        if (route == ShotRoute.i2v) {
+        if (route == ShotRoute.t2v) {
           final raw = File('${outFile.path}.raw.mp4');
+          result = await gateway.generateT2vClip(
+            model: series.defaults.t2vModel,
+            resolution: resolution,
+            prompt: (shot.visual ?? '').trim().isEmpty
+                ? _framePrompt(shot)
+                : shot.visual!,
+            durationS: t2vSeconds,
+            outFile: raw,
+            onLog: run.logs.add,
+          );
+          await gateway.normalizeClip(
+            input: raw,
+            outFile: outFile,
+            width: width,
+            height: height,
+          );
+          if (raw.existsSync()) raw.deleteSync();
+        } else if (route == ShotRoute.i2v) {
+          final raw = File('${outFile.path}.raw.mp4');
+          final frameFile = store.assetFile(
+            run.seriesId,
+            run.episodeId,
+            frame.path!,
+          );
           result = await gateway.generateI2vClip(
             model: clipModel,
             resolution: resolution,
@@ -570,6 +602,11 @@ class DramaRunner {
           if (raw.existsSync()) raw.deleteSync();
         } else {
           final duration = plan.durationFor(shot.id).ceil();
+          final frameFile = store.assetFile(
+            run.seriesId,
+            run.episodeId,
+            frame.path!,
+          );
           await gateway.renderLocalClip(
             image: frameFile,
             outFile: outFile,
@@ -601,7 +638,9 @@ class DramaRunner {
         run.items.add(
           DramaRunItem(
             id: shot.id,
-            kind: route == ShotRoute.i2v ? 'clip' : 'local_clip',
+            kind: route == ShotRoute.i2v
+                ? 'clip'
+                : (route == ShotRoute.t2v ? 't2v' : 'local_clip'),
             status: DramaStatus.succeeded,
             path: relative,
             costYuan: result.costYuan,
@@ -624,7 +663,9 @@ class DramaRunner {
         run.items.add(
           DramaRunItem(
             id: shot.id,
-            kind: route == ShotRoute.i2v ? 'clip' : 'local_clip',
+            kind: route == ShotRoute.i2v
+                ? 'clip'
+                : (route == ShotRoute.t2v ? 't2v' : 'local_clip'),
             status: DramaStatus.failed,
             error: '$e',
           ),

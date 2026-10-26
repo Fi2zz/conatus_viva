@@ -14,7 +14,7 @@ import 'frame.dart';
 import 'storyboard.dart';
 
 /// 单镜渲染路由。
-enum ShotRoute { kenburns, micro, i2v }
+enum ShotRoute { kenburns, micro, i2v, t2v }
 
 /// 计划单固定使用的 i2v 生成参数（输出为 `i2v_generation` 对象）。
 const String kPlanI2vModel = 'wan2.6-i2v-flash';
@@ -131,18 +131,21 @@ class PlanTotals {
     required this.i2vSeconds,
     required this.estimatedYuan,
     required this.remainingYuan,
+    required this.totalRemainingYuan,
   });
 
   final double durationS;
   final int i2vSeconds;
   final double estimatedYuan;
   final double remainingYuan;
+  final double totalRemainingYuan;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'duration_s': durationS,
     'i2v_seconds': i2vSeconds,
     'estimated_yuan': estimatedYuan,
     'remaining_yuan': remainingYuan,
+    'total_remaining_yuan': totalRemainingYuan,
   };
 }
 
@@ -203,12 +206,21 @@ class RenderPlan {
 const int _i2vMinSeconds = 2;
 const int _i2vMaxSeconds = 10;
 
+int _t2vSecondsFor(double durationS) {
+  final seconds = durationS.ceil();
+  if (seconds < 2) return 2;
+  if (seconds > 10) return 10;
+  return seconds;
+}
+
 /// 构建渲染计划单（纯函数，确定性）。
 RenderPlan buildRenderPlan({
   required Storyboard storyboard,
   required double priceYuanPerSecond,
   double? budgetYuan,
   int maxI2vSeconds = 0,
+  double? t2vPriceYuanPerSecond,
+  double? totalBudgetYuan,
 }) {
   if (!priceYuanPerSecond.isFinite || priceYuanPerSecond <= 0) {
     throw ArgumentError('priceYuanPerSecond 必须是有限正数：$priceYuanPerSecond');
@@ -218,6 +230,16 @@ RenderPlan buildRenderPlan({
   }
   if (maxI2vSeconds < 0) {
     throw ArgumentError('maxI2vSeconds 必须 >= 0：$maxI2vSeconds');
+  }
+  if (t2vPriceYuanPerSecond != null &&
+      (!t2vPriceYuanPerSecond.isFinite || t2vPriceYuanPerSecond <= 0)) {
+    throw ArgumentError(
+      't2vPriceYuanPerSecond 必须是有限正数：$t2vPriceYuanPerSecond',
+    );
+  }
+  if (totalBudgetYuan != null &&
+      (!totalBudgetYuan.isFinite || totalBudgetYuan <= 0)) {
+    throw ArgumentError('totalBudgetYuan 必须是有限正数：$totalBudgetYuan');
   }
 
   final budget = budgetYuan ?? storyboard.budgetYuan;
@@ -288,14 +310,23 @@ RenderPlan buildRenderPlan({
   for (final shot in storyboard.shots) {
     final d = durations[shot.id]!;
     final i2vSeconds = i2vSecondsByShot[shot.id] ?? 0;
-    final route = switch (shot.kind) {
-      ShotKind.speakOff ||
-      ShotKind.insert ||
-      ShotKind.establishing => ShotRoute.kenburns,
-      ShotKind.listenFace ||
-      ShotKind.action => i2vSeconds > 0 ? ShotRoute.i2v : ShotRoute.micro,
-    };
-    final cost = _round2(i2vSeconds * priceYuanPerSecond);
+    final t2vSeconds = t2vPriceYuanPerSecond != null &&
+            shot.kind == ShotKind.establishing
+        ? _t2vSecondsFor(d)
+        : 0;
+    final route = t2vSeconds > 0
+        ? ShotRoute.t2v
+        : switch (shot.kind) {
+            ShotKind.speakOff ||
+            ShotKind.insert ||
+            ShotKind.establishing => ShotRoute.kenburns,
+            ShotKind.listenFace ||
+            ShotKind.action => i2vSeconds > 0 ? ShotRoute.i2v : ShotRoute.micro,
+          };
+    final cost = _round2(
+      i2vSeconds * priceYuanPerSecond +
+          t2vSeconds * (t2vPriceYuanPerSecond ?? 0),
+    );
     plannedShots.add(
       PlannedShot(
         shotId: shot.id,
@@ -326,6 +357,7 @@ RenderPlan buildRenderPlan({
   var kenburns = 0;
   var micro = 0;
   var i2vCount = 0;
+  var t2vCount = 0;
   for (final shot in plannedShots) {
     switch (shot.route) {
       case ShotRoute.kenburns:
@@ -334,6 +366,8 @@ RenderPlan buildRenderPlan({
         micro++;
       case ShotRoute.i2v:
         i2vCount++;
+      case ShotRoute.t2v:
+        t2vCount++;
     }
   }
 
@@ -353,11 +387,15 @@ RenderPlan buildRenderPlan({
       i2vSeconds: totalI2vSeconds,
       estimatedYuan: estimatedYuan,
       remainingYuan: remainingYuan,
+      totalRemainingYuan: _round2(
+        ((totalBudgetYuan ?? budget) - estimatedYuan).clamp(0, double.infinity),
+      ),
     ),
     counts: <String, int>{
       'kenburns': kenburns,
       'micro': micro,
       'i2v': i2vCount,
+      't2v': t2vCount,
     },
     warnings: warnings,
   );

@@ -270,6 +270,58 @@ void main() {
     expect(find(stale, DramaStep.frame).status, DramaStatus.stale);
   });
 
+  test('a t2v clip completes the frame step without a frame artifact', () {
+    final s = series();
+    final b = board();
+    final episode = DramaEpisode.create(series: s, episodeId: 'ep07', title: 'x');
+    final shot = b.shots.single;
+    final avatarHash = s.cast['erniu']!.avatar!.sourceHash;
+    final frameHash = dramaFrameHash(
+      shot: shot,
+      castAvatarHash: avatarHash,
+      model: 'wan2.7-image',
+      size: '1K',
+    );
+    final clipHash = dramaClipHash(
+      shot: shot,
+      frameHash: frameHash,
+      route: 't2v',
+      model: 'wan3.0-video',
+      resolution: '720P',
+      i2vSeconds: 0,
+    );
+    final plan = <String, Object?>{
+      'shots': <Object?>[
+        <String, Object?>{
+          'shot_id': 's01',
+          'route': 't2v',
+          'i2v_seconds': 0,
+          'duration_s': 3.2,
+        },
+      ],
+    };
+    final state = DramaEpisodeState.empty('jietiao', 'ep07').withShot(
+      's01',
+      DramaShotState(
+        clip: DramaArtifact(
+          status: DramaStatus.succeeded,
+          path: 'assets/clips/s01/$clipHash.mp4',
+          sourceHash: clipHash,
+          model: 'wan3.0-video',
+        ),
+      ),
+    );
+    final steps = deriveDramaSteps(
+      series: s,
+      episode: episode,
+      storyboard: b,
+      planJson: plan,
+      state: state,
+      wired: kDramaWiredSteps,
+    );
+    expect(find(steps, DramaStep.frame).status, DramaStatus.succeeded);
+  });
+
   test('a degraded clip is treated as current, not stale', () {
     final s = series();
     final b = board();

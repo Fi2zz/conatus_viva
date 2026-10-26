@@ -4,7 +4,7 @@
 /// （`render_plan.dart` 的 wire 格式，snake_case）。这里的纯函数只做展示层计算，
 /// 不发明状态或成本：一切数字都来自计划单本身。
 
-export type ShotRoute = "kenburns" | "micro" | "i2v";
+export type ShotRoute = "kenburns" | "micro" | "i2v" | "t2v";
 export type ShotKind = "speak_off" | "insert" | "listen_face" | "action" | "establishing";
 export type ShotPriority = "hook" | "turn" | "payoff" | "normal";
 
@@ -28,6 +28,7 @@ export interface PlanTotals {
   i2v_seconds: number;
   estimated_yuan: number;
   remaining_yuan: number;
+  total_remaining_yuan?: number;
 }
 
 export interface PlanFrame {
@@ -82,9 +83,9 @@ export function timelineBlocks(
   return out;
 }
 
-/// 三条路由的成本构成，缺省键恒为零（不因无该路由镜头而缺键）。
+/// 四条路由的成本构成，缺省键恒为零（不因无该路由镜头而缺键）。
 export function costByRoute(shots: PlanShot[]): Record<ShotRoute, number> {
-  const out: Record<ShotRoute, number> = { kenburns: 0, micro: 0, i2v: 0 };
+  const out: Record<ShotRoute, number> = { kenburns: 0, micro: 0, i2v: 0, t2v: 0 };
   for (const s of shots) out[s.route] += s.cost_yuan;
   return out;
 }
@@ -98,6 +99,8 @@ export function routeLabel(route: ShotRoute): string {
       return "局部微动";
     case "i2v":
       return "图生视频";
+    case "t2v":
+      return "文生视频";
   }
 }
 
