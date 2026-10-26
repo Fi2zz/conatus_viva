@@ -11,6 +11,13 @@ void main() {
       expect(apiRouteFor('GET', '/api/t2v/run-1'), ApiRoute.getT2v);
     });
 
+    test('settings routes are GET/PUT only', () {
+      expect(apiRouteFor('GET', '/api/settings'), ApiRoute.settings);
+      expect(apiRouteFor('PUT', '/api/settings'), ApiRoute.settings);
+      expect(apiRouteFor('POST', '/api/settings'), ApiRoute.unknown);
+      expect(apiRouteFor('GET', '/api/settings/x'), ApiRoute.unknown);
+    });
+
     test('non-matching methods and paths are unknown', () {
       expect(apiRouteFor('POST', '/api/t2v/run-1/video'), ApiRoute.unknown);
       expect(apiRouteFor('GET', '/api/t2v'), ApiRoute.unknown);

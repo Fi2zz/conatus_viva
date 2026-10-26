@@ -17,6 +17,8 @@ import 'package:flutter_wanxiang/pipeline/image_generation.dart';
 import 'package:flutter_wanxiang/pipeline/speaker_video.dart';
 import 'package:flutter_wanxiang/pipeline/video_generation.dart';
 import 'package:flutter_wanxiang/server/api_router.dart';
+import 'package:flutter_wanxiang/server/settings.dart';
+import 'package:flutter_wanxiang/server/settings_controller.dart';
 
 /// One dialect dropdown option.
 ///
@@ -214,9 +216,11 @@ class PipelineServer {
     this.dramaController,
     this.dramaRoot,
     this.dramaLlm,
+    this.secretStore,
   }) : _runs = <String, RunRecord>{},
        _imageJobs = <String, JobRunRecord>{},
        _videoJobs = <String, JobRunRecord>{},
+       _settings = SettingsController(cfg: cfg, store: secretStore),
        _drama =
            dramaController ??
            DramaController(
@@ -268,7 +272,11 @@ class PipelineServer {
   /// 测试 seam：替换真实 LLM。
   final DramaLlm? dramaLlm;
 
+  /// 设置页密钥存储；null → 设置 API 只读，PUT 返回 501。
+  final SecretStore? secretStore;
+
   final DramaController _drama;
+  final SettingsController _settings;
 
   final Map<String, RunRecord> _runs;
   final Map<String, JobRunRecord> _imageJobs;
@@ -281,6 +289,10 @@ class PipelineServer {
 
   /// Starts the server; prints the bound URL to stdout.
   Future<void> start() async {
+    final stored = await secretStore?.readAll();
+    if (stored != null && stored.isNotEmpty) {
+      cfg.updateSecrets(stored);
+    }
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     stdout.writeln(
       'Pipeline server running at http://localhost:${_server!.port}',
@@ -335,6 +347,8 @@ class PipelineServer {
         await _getVideoFile(req);
       case ApiRoute.getShortDramaPlan:
         await _getShortDramaPlan(req);
+      case ApiRoute.settings:
+        await _settings.handle(req);
       case ApiRoute.drama:
         await _drama.handle(req);
       case ApiRoute.unknown:

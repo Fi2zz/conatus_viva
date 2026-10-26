@@ -6,7 +6,8 @@ DART_TEST_CMD := dart test test/pipeline \
 	test/server/image_api_test.dart \
 	test/server/video_api_test.dart \
 	test/server/short_drama_api_test.dart \
-	test/server/drama_api_test.dart
+	test/server/drama_api_test.dart \
+	test/server/settings_api_test.dart
 
 .DEFAULT_GOAL := help
 
