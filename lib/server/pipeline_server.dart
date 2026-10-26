@@ -9,6 +9,7 @@ import 'package:flutter_wanxiang/pipeline/dialect_map.dart';
 import 'package:flutter_wanxiang/pipeline/drama/controller.dart';
 import 'package:flutter_wanxiang/pipeline/drama/cost.dart';
 import 'package:flutter_wanxiang/pipeline/drama/llm.dart';
+import 'package:flutter_wanxiang/pipeline/drama/pricing.dart';
 import 'package:flutter_wanxiang/pipeline/drama/store.dart';
 import 'package:flutter_wanxiang/pipeline/edit_models.dart';
 import 'package:flutter_wanxiang/pipeline/errors.dart';
@@ -229,6 +230,7 @@ class PipelineServer {
                llm: dramaLlm ?? QwenDramaLlm(cfg: cfg),
              ),
              priceYuanPerSecond: defaultDramaI2vPriceYuanPerSecond(),
+             pricing: dramaPricingFromConfig(cfg),
            );
 
   final PipelineConfig cfg;

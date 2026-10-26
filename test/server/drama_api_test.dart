@@ -284,7 +284,7 @@ void main() {
       port,
       '/api/drama/series/jietiao/episodes/ep07/estimate',
       <String, Object?>{
-        'targets': <Object?>['story'],
+        'step': 'story',
       },
     );
     expect(estimate.status, 200);

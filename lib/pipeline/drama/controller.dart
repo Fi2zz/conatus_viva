@@ -18,6 +18,7 @@ import 'hash.dart';
 import 'ids.dart';
 import 'json.dart';
 import 'llm.dart';
+import 'pricing.dart';
 import 'series.dart';
 import 'steps.dart';
 import 'store.dart';
@@ -98,12 +99,14 @@ class DramaController {
     required this.store,
     required this.drafts,
     required this.priceYuanPerSecond,
+    DramaPricing? pricing,
     this.maxBodyBytes = 2 * 1024 * 1024,
-  });
+  }) : pricing = pricing ?? DramaPricing.catalog();
 
   final DramaStore store;
   final DramaDraftService drafts;
   final double priceYuanPerSecond;
+  final DramaPricing pricing;
   final int maxBodyBytes;
 
   static const Map<String, bool> _capabilities = <String, bool>{
@@ -391,12 +394,7 @@ class DramaController {
   ) async {
     final body = await _bodyOrError(req);
     if (body == null) return;
-    final targets = _bodyModel(
-      () => <String>{
-        for (final raw in asJsonList(body['targets'], 'targets'))
-          requireJsonString(raw, 'targets[]'),
-      },
-    );
+    final request = _bodyModel(() => parseDramaEstimateRequest(body));
     final series = store.readSeries(seriesId);
     final episode = store.readEpisode(seriesId, episodeId);
     final estimate = estimateDrama(
@@ -405,8 +403,9 @@ class DramaController {
       state: store.readState(seriesId, episodeId),
       storyboard: store.readStoryboard(seriesId, episodeId),
       planJson: store.readPlanJson(seriesId, episodeId),
-      targets: targets,
-      force: optionalJsonBool(body['force'], 'force', fallback: false),
+      request: request,
+      pricing: pricing,
+      store: store,
     );
     await _sendJson(req, HttpStatus.ok, estimate.toJson());
   }
