@@ -2,14 +2,22 @@
 
 输入一组照片（本地路径或 URL）和方言地区，端到端产出 15–20 秒的相册视频：多模态选片、口播文案、方言配音、万相图生视频、字幕合成。全程断点续跑、不重复扣费。
 
-桌面 app 把生成能力分成两类：**图片合成**（万相图像 2.7 / 千问图像 3.0 / Z-Image）
-与**视频合成**（万相 3.0 文生视频 / 图生视频、方言配音主讲人），另有视频编辑成本对比。
+桌面 app 当前入口是**短剧工作台**：拆片 → 故事 → 定妆 → 分镜 → 画面 → 声音 → 剪辑 → 打包。
+图片合成（万相图像 2.7 / 千问图像 3.0 / Z-Image）与视频合成（万相 3.0 文生视频 / 图生视频、
+方言配音主讲人）仍保留在管线与内嵌 server，另有视频编辑成本对比。
 
 核心是纯 Dart 管线（`lib/pipeline/`，不依赖 Flutter），三种使用形态：
 
 - **CLI**：`bin/conatus_host.dart`（实验入口，本文主要用法）
 - **conatus 工具**：[conatus](https://github.com/Fi2zz/conatus) 的 `generate_monthly_video`（高风险操作走审批）
-- **Flutter 桌面 app**：「方言配音主讲人」——内嵌 HTTP server + React 前端（WebView 壳），见下文专章
+- **Flutter 桌面 app**：短剧工作台——内嵌 HTTP server + React 前端（WebView 壳），见上节界面预览
+
+## 界面预览
+
+![短剧工作台](docs/images/short-drama-workbench.png)
+
+左栏是 8 道工序与累计成本，中间是当前工序的舞台，右栏检视选中镜头（台词、构图、
+生成状态）；顶部切换剧 / 集与「产线视图 / 画布视图」。
 
 ## 常用命令（Makefile）
 
@@ -80,9 +88,9 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 
 运行中进度打在 stderr（`[mm:ss]` 前缀），stdout 只输出结果 JSON。
 
-## 图片合成与视频合成（桌面 app）
+## 图片合成与视频合成（生成能力）
 
-桌面 app 顶部五个平行 tab：**图片合成** / **文生视频** / **图生视频** / **方言配音主讲人** / **视频编辑成本**。
+这些能力仍由内嵌 server 与管线提供；当前桌面入口聚焦短剧工作台。下面是各能力的参数与计费口径。
 
 ### 图片合成
 
@@ -114,9 +122,11 @@ dart run bin/conatus_host.dart --text-to-video "大爷在胡同里遛鸟" --dial
 **只按输出秒数计费**（`时长 × 该分辨率档单价`）。成片同样落在
 `~/conatus_viva/videos/<id>/video.mp4`。
 
-## 方言配音主讲人（Flutter 桌面 app）
+## 方言配音主讲人（生成能力）
 
-`lib/main.dart` 是桌面壳：启动内嵌 HTTP server，WebView 加载打包进来的 React 前端。填主题、选方言、定时长（2–30 秒），生成带卡通主讲人（左下角头像叠加）的方言口播视频，页内预览并下载 mp4。
+主讲人文生视频（主题 + 方言 + 时长 2–30 秒）由管线 `speaker_video.dart` 提供：万相 t2v 出片后
+用 ffmpeg 叠加卡通主讲人头像。当前桌面入口已切到短剧工作台，该能力的请求与合成逻辑仍在
+内嵌 server 中。`lib/main.dart` 是桌面壳：启动内嵌 HTTP server，WebView 加载打包进来的 React 前端。
 
 ```bash
 # 密钥：打开 app 后点右下角「设置」，填入 DASHSCOPE_API_KEY。
