@@ -1,5 +1,10 @@
 # conatus_viva — 图片 / 视频两类生成与月度相册流水线
 
+![短剧工作台](docs/images/short-drama-workbench.png)
+
+竖屏短剧工作台：左栏 8 道工序与累计成本，中间是当前工序的舞台，右栏检视选中镜头
+（台词、构图、生成状态）；顶部切换剧 / 集与「产线视图 / 画布视图」。
+
 输入一组照片（本地路径或 URL）和方言地区，端到端产出 15–20 秒的相册视频：多模态选片、口播文案、方言配音、万相图生视频、字幕合成。全程断点续跑、不重复扣费。
 
 桌面 app 当前入口是**短剧工作台**：拆片 → 故事 → 定妆 → 分镜 → 画面 → 声音 → 剪辑 → 打包。
@@ -10,14 +15,7 @@
 
 - **CLI**：`bin/conatus_host.dart`（实验入口，本文主要用法）
 - **conatus 工具**：[conatus](https://github.com/Fi2zz/conatus) 的 `generate_monthly_video`（高风险操作走审批）
-- **Flutter 桌面 app**：短剧工作台——内嵌 HTTP server + React 前端（WebView 壳），见上节界面预览
-
-## 界面预览
-
-![短剧工作台](docs/images/short-drama-workbench.png)
-
-左栏是 8 道工序与累计成本，中间是当前工序的舞台，右栏检视选中镜头（台词、构图、
-生成状态）；顶部切换剧 / 集与「产线视图 / 画布视图」。
+- **Flutter 桌面 app**：短剧工作台——内嵌 HTTP server + React 前端（WebView 壳），见文首截图
 
 ## 常用命令（Makefile）
 
